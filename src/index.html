@@ -1,0 +1,237 @@
+<title>SPC Warn</title>
+<meta name="description" content="Live NEXRAD Level II viewer for SPC storm tracking and warning recommendations to WFOs">
+<style>/*MAPLIBRE_CSS*/</style>
+<style>
+/* Layout: full-height radar workstation. Toolbar on top, map panels fill the rest, recommendation dialog docks right. */
+:root {
+  --bg: #0b0f14; --panel: #121922; --line: #263342; --fg: #dbe4ec; --muted: #8597a8; --accent: #3fb6ff;
+  --svr: #ffd400; --tor: #ff3b3b; --live: #35d07f;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.35 var(--sans); overflow: hidden; }
+#app { display: flex; flex-direction: column; height: 100%; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font: 700 14px var(--mono); letter-spacing: .06em; color: #fff; }
+.brand small { color: var(--muted); font-weight: 500; letter-spacing: 0; }
+.grp { display: flex; align-items: center; gap: 4px; }
+.grp > .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
+button, input, select { font: inherit; color: var(--fg); background: #18212c; border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; }
+button { cursor: pointer; }
+button:hover { border-color: #3a4c60; background: #1d2835; }
+button.on { background: #1f3a52; border-color: var(--accent); color: #fff; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+kbd { font: 600 10px var(--mono); padding: 1px 4px; border: 1px solid #44566a; border-bottom-width: 2px; border-radius: 3px; background: #1a2430; color: #cfe0ee; }
+button kbd { margin-left: 4px; opacity: .8; }
+#site { width: 64px; text-transform: uppercase; font-family: var(--mono); }
+#archive { width: 190px; }
+#mode { font: 700 11px var(--mono); padding: 3px 7px; border-radius: 3px; background: #26313d; }
+#mode[data-kind="live"] { background: var(--live); color: #04140b; }
+#mode[data-kind="hist"] { background: #f0a030; color: #1b1000; }
+#logcount, .count { font: 700 11px var(--mono); background: #26313d; border-radius: 8px; padding: 0 6px; }
+#volinfo { color: var(--muted); font: 12px var(--mono); }
+#tiltval { font: 700 13px var(--mono); min-width: 44px; text-align: center; }
+.spacer { flex: 1; }
+main { position: relative; flex: 1; min-height: 0; }
+#maps { position: absolute; inset: 0; display: grid; gap: 2px; background: #000; }
+#maps[data-layout="1"] { grid-template: 1fr / 1fr; }
+#maps[data-layout="2"] { grid-template: 1fr / 1fr 1fr; }
+#maps[data-layout="4"] { grid-template: 1fr 1fr / 1fr 1fr; }
+.panel { position: relative; min-width: 0; min-height: 0; outline: 1px solid transparent; }
+.panel.active { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
+.panel .map { position: absolute; inset: 0; }
+.panel .overlay { position: absolute; inset: 0; pointer-events: none; }
+.phead { position: absolute; top: 6px; left: 6px; display: flex; gap: 8px; align-items: center; padding: 3px 8px; background: rgba(8,12,16,.82); border: 1px solid var(--line); border-radius: 4px; font: 12px var(--mono); pointer-events: none; }
+.pprod { font-weight: 700; color: #fff; }
+.ptag { background: #7a3cff; color: #fff; padding: 0 5px; border-radius: 3px; font-weight: 700; font-size: 10px; }
+.pfoot { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 8px; align-items: center; padding: 3px 8px; background: rgba(8,12,16,.82); border: 1px solid var(--line); border-radius: 4px; font: 12px var(--mono); pointer-events: none; }
+.pval { min-width: 70px; color: #fff; font-weight: 700; }
+.legend { width: 160px; height: 9px; border-radius: 2px; }
+footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; background: var(--panel); border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
+#status[data-kind="error"] { color: #ff8a7a; }
+#prompt { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(10,16,22,.94); border: 1px solid #fff; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px; max-width: 80%; text-align: center; }
+#cursorbox { position: absolute; z-index: 5; pointer-events: none; background: rgba(6,10,14,.9); border: 1px solid #3a4c60; border-radius: 4px; padding: 4px 7px; font: 11.5px/1.4 var(--mono); color: #e6edf3; white-space: pre; }
+#cursorbox b { color: #fff; font-size: 12.5px; }
+#radarmenu { position: absolute; z-index: 10; width: 230px; background: var(--panel); border: 1px solid #44566a; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.6); padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+#rm-search { text-transform: uppercase; font-family: var(--mono); }
+#rm-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; }
+#rm-list button { display: flex; justify-content: space-between; border: 0; background: transparent; font: 12.5px var(--mono); padding: 5px 8px; text-align: left; }
+#rm-list button:hover, #rm-list button.hot { background: #1f3a52; }
+#rm-list button span { color: var(--muted); }
+#rm-list button.cur b { color: var(--live); }
+#toast { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 9; background: #1f3a52; border: 1px solid var(--accent); padding: 8px 14px; border-radius: 6px; }
+#issued-wrap { position: absolute; top: 44px; right: 8px; z-index: 4; display: flex; flex-direction: column; gap: 4px; width: 230px; }
+.wcard { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; background: rgba(12,18,24,.92); border-left: 4px solid #fff; }
+.wcard span { color: var(--muted); font-size: 11px; }
+/* recommendation dialog */
+#warn { position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%); z-index: 6; background: rgba(14,20,27,.97); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+#warn[data-type="TOR"] .whead { border-bottom-color: var(--tor); }
+.whead { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 3px solid var(--svr); }
+.whead h2 { margin: 0; font-size: 15px; }
+.wbody { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 12px; }
+.wbody h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+#diag { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#diag div { background: #18212c; border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; display: flex; flex-direction: column; }
+#diag span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+#diag b { font: 700 13px var(--mono); }
+.seg { display: flex; gap: 4px; }
+.seg label, .chip { cursor: pointer; }
+.seg input, .chip input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span, .chip span { display: inline-block; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: #18212c; }
+.seg input:checked + span { background: #3a3200; border-color: var(--svr); color: #fff; }
+.seg input[value="TOR"]:checked + span { background: #4a1010; border-color: var(--tor); }
+#f-mode, .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.subh { margin-top: 8px !important; }
+.subrow { margin-top: 8px; align-items: end; }
+#f-tc { margin-top: 8px; }
+.chip input:checked + span { background: #1f3a52; border-color: var(--accent); color: #fff; }
+.seg input:focus-visible + span, .chip input:focus-visible + span { outline: 2px solid var(--accent); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field > span { color: var(--muted); font-size: 11px; }
+.field input, .field select { width: 100%; box-sizing: border-box; }
+.check { display: flex; gap: 6px; align-items: center; }
+#rec { background: #13202c; border: 1px solid #2a4a66; border-radius: 6px; padding: 8px 10px; }
+#rec ul { margin: 6px 0 0; padding-left: 18px; color: #b8c7d4; font-size: 12px; }
+.rechead .t-SVR { color: var(--svr); } .rechead .t-TOR { color: var(--tor); }
+[data-user="1"] { box-shadow: inset 3px 0 0 #f0a030; }
+#w-handoff { white-space: pre-wrap; font: 11.5px/1.45 var(--mono); background: #0b1520; border: 1px solid #2a4a66; border-radius: 4px; padding: 8px; margin: 0; }
+#detail h3 { margin: 12px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.dhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.dmeta { color: var(--muted); font: 12px var(--mono); margin-bottom: 10px; }
+.dbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+.hist { margin: 0; padding-left: 20px; font: 12px var(--mono); }
+.note-pre, .text-pre { white-space: pre-wrap; font: 11.5px/1.45 var(--mono); background: #070a0d; border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin: 0; max-height: 260px; overflow: auto; }
+.panel .maplibregl-canvas-container.maplibregl-interactive, .panel .maplibregl-canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='25' height='25'%3E%3Cpath d='M12.5 0v10M12.5 15v10M0 12.5h10M15 12.5h10' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M12.5 0v10M12.5 15v10M0 12.5h10M15 12.5h10' stroke='%2322d3ee' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, crosshair; }
+#w-text, #textview-body { white-space: pre-wrap; font: 11.5px/1.45 var(--mono); background: #070a0d; border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin: 0; max-height: 300px; overflow: auto; }
+.wfoot { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+#btn-issue { background: #5a4a00; border-color: var(--svr); color: #fff; font-weight: 700; }
+#warn[data-type="TOR"] #btn-issue { background: #6a1414; border-color: var(--tor); }
+#help, #textview { position: absolute; inset: 0; z-index: 8; background: rgba(0,0,0,.6); display: grid; place-items: center; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; max-width: 760px; max-height: 90%; overflow: auto; }
+.card h2 { margin: 0 0 10px; font-size: 16px; }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 24px; }
+.keys div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #1c2733; }
+.note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+@media (max-width: 700px) { #archive { width: 140px; } .hide-sm { display: none; } }
+</style>
+
+<div id="app">
+<header>
+  <div class="brand">SPC&nbsp;WARN <small>Level II</small></div>
+  <form id="siteform" class="grp">
+    <span class="lbl">Radar</span>
+    <input id="site" list="sites" maxlength="4" autocomplete="off" aria-label="Radar site">
+    <datalist id="sites"></datalist>
+    <input id="archive" type="datetime-local" title="Archive case end time (UTC). Leave empty for live." aria-label="Archive time UTC">
+    <button type="submit">Load</button>
+    <button type="button" id="golive" title="Clear archive time and go live">Live</button>
+  </form>
+  <span id="mode">—</span>
+  <span id="volinfo"></span>
+  <div class="spacer"></div>
+  <div class="grp"><span class="lbl">Panels</span>
+    <button data-layout="1">1<kbd>1</kbd></button><button data-layout="2">2<kbd>2</kbd></button><button data-layout="4">4<kbd>4</kbd></button></div>
+  <div class="grp"><span class="lbl">Product</span>
+    <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
+    <button data-prod="ZDR">ZDR<kbd>Z</kbd></button><button data-prod="RHO">CC<kbd>C</kbd></button><button data-prod="PHI" class="hide-sm">PHI<kbd>P</kbd></button></div>
+  <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><span id="tiltval">0.5°</span><button id="tiltup" aria-label="Tilt up">▲</button></div>
+  <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
+    <button id="btn-help" aria-label="Keyboard shortcuts">?</button></div>
+  <div class="grp"><span class="lbl">Log</span><button id="btn-export" title="Download every issued recommendation as GeoJSON">Export GeoJSON <span id="logcount" class="count">0</span><kbd>E</kbd></button><button id="btn-clearlog">Clear log</button></div>
+</header>
+<main>
+  <div id="maps"></div>
+  <div id="prompt" hidden></div>
+  <div id="toast" hidden></div>
+  <div id="cursorbox" hidden></div>
+  <div id="radarmenu" hidden><input id="rm-search" placeholder="Type a radar ID" autocomplete="off" aria-label="Search radars"><div id="rm-list"></div></div>
+  <div id="issued-wrap" hidden><div id="issued"></div></div>
+
+  <aside id="warn" hidden data-type="SVR">
+    <div class="whead"><h2 id="w-title">Recommendation</h2><div class="grp"><button id="btn-retrack" type="button">Re-track</button><button id="btn-close" type="button">Close<kbd>Esc</kbd></button></div></div>
+    <div class="wbody">
+      <section><h3>Storm diagnostics</h3><div id="diag"></div></section>
+      <section id="rec"></section>
+      <section><h3>Recommended product</h3>
+        <div class="seg" id="f-type"><label><input type="radio" name="wtype" value="SVR"><span>Severe Thunderstorm</span></label><label><input type="radio" name="wtype" value="TOR"><span>Tornado</span></label></div></section>
+      <section><h3>Convective mode</h3><div id="f-mode"></div>
+        <div id="f-subwrap"><h3 class="subh">Sub-mode</h3><div id="f-sub" class="chips"></div></div>
+        <div id="f-supwrap" class="row subrow">
+          <div class="seg" id="f-move"><label><input type="radio" name="smove" value="RM"><span>Right-moving</span></label><label><input type="radio" name="smove" value="LM"><span>Left-moving</span></label></div>
+          <label class="field" id="f-mesowrap"><span>Mesocyclone strength</span><select id="f-meso"><option value="">Not rated</option><option value="weak">Weak</option><option value="moderate">Moderate</option><option value="strong">Strong</option></select></label>
+        </div>
+        <label class="check"><input id="f-tc" type="checkbox"> Tropical cyclone</label></section>
+      <section><h3>Motion and duration</h3>
+        <div class="row">
+          <label class="field"><span>From (deg)</span><input id="f-dir" type="number" min="0" max="360" step="5"></label>
+          <label class="field"><span>Speed (kt)</span><input id="f-spd" type="number" min="0" max="120" step="1"></label>
+          <label class="field"><span>Duration</span><select id="f-dur"><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
+          <label class="field"><span>VROT (kt, manual)</span><input id="f-vrot" type="number" min="0" max="150" step="1" placeholder="e.g. 45"></label>
+        </div></section>
+      <section><h3>Impact tags</h3>
+        <div class="row">
+          <label class="field"><span>Max hail size</span><select id="f-hail"></select></label>
+          <label class="field svr-only"><span>Hail threat</span><select id="f-hailsrc"><option>RADAR INDICATED</option><option>OBSERVED</option></select></label>
+          <label class="field svr-only"><span>Max wind gust</span><select id="f-wind"></select></label>
+          <label class="field svr-only"><span>Wind threat</span><select id="f-windsrc"><option>RADAR INDICATED</option><option>OBSERVED</option></select></label>
+          <label class="field svr-only"><span>Damage threat</span><select id="f-svrdmg"><option value="">Base</option><option>CONSIDERABLE</option><option>DESTRUCTIVE</option></select></label>
+          <label class="check svr-only"><input id="f-torposs" type="checkbox"> TORNADO...POSSIBLE</label>
+          <label class="field tor-only"><span>Tornado</span><select id="f-torsrc"><option>RADAR INDICATED</option><option>OBSERVED</option></select></label>
+          <label class="field tor-only"><span>Tornado damage threat</span><select id="f-tordmg"><option value="">Base</option><option>CONSIDERABLE</option><option>CATASTROPHIC</option></select></label>
+        </div>
+        <p class="note">Fields you change are marked in orange and keep your value when the recommendation updates.</p></section>
+      <section><h3>Handoff note for the WFO desk</h3><pre id="w-handoff"></pre></section>
+      <section><h3>Product text (draft)</h3><pre id="w-text"></pre></section>
+    </div>
+    <div class="wfoot"><button id="btn-issue" type="button">Issue<kbd>Ctrl</kbd><kbd>Enter</kbd></button><button id="btn-apply" type="button">Reset to recommended</button><button id="btn-copyhand" type="button">Copy handoff</button><button id="btn-copy" type="button">Copy text</button></div>
+  </aside>
+
+  <div id="help" hidden><div class="card">
+    <h2>Keyboard</h2>
+    <div class="keys">
+      <div><span>Tilt up / down</span><span><kbd>↑</kbd> <kbd>↓</kbd></span></div>
+      <div><span>Previous / next scan (incl. SAILS, MRLE)</span><span><kbd>←</kbd> <kbd>→</kbd></span></div>
+      <div><span>Oldest / latest scan</span><span><kbd>Home</kbd> <kbd>End</kbd></span></div>
+      <div><span>Loop on / off</span><span><kbd>Space</kbd></span></div>
+      <div><span>1, 2 or 4 panels</span><span><kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd></span></div>
+      <div><span>Next panel</span><span><kbd>Tab</kbd></span></div>
+      <div><span>REF VEL SW ZDR CC PHI</span><span><kbd>R</kbd><kbd>V</kbd><kbd>W</kbd><kbd>Z</kbd><kbd>C</kbd><kbd>P</kbd></span></div>
+      <div><span>Track cell</span><span><kbd>T</kbd></span></div>
+      <div><span>Track line</span><span><kbd>L</kbd></span></div>
+      <div><span>Track only, no polygon (cell / line)</span><span><kbd>G</kbd> <kbd>Shift</kbd><kbd>G</kbd></span></div>
+      <div><span>SCIT tracks on / off</span><span><kbd>I</kbd></span></div>
+      <div><span>Radar menu</span><span>hold right-click</span></div>
+      <div><span>Finish step / open dialog</span><span><kbd>Enter</kbd></span></div>
+      <div><span>Recommendation dialog</span><span><kbd>D</kbd></span></div>
+      <div><span>Issue from dialog</span><span><kbd>Ctrl</kbd><kbd>Enter</kbd></span></div>
+      <div><span>Cancel / close</span><span><kbd>Esc</kbd></span></div>
+      <div><span>Clear track and polygon</span><span><kbd>X</kbd></span></div>
+      <div><span>Export recommendation log (GeoJSON)</span><span><kbd>E</kbd></span></div>
+      <div><span>Clear your storm tracks only</span><span><kbd>Shift</kbd><kbd>X</kbd></span></div>
+      <div><span>ProbSevere objects on / off</span><span><kbd>O</kbd></span></div>
+      <div><span>Storm-relative velocity</span><span><kbd>S</kbd></span></div>
+      <div><span>Velocity dealiasing on / off</span><span><kbd>U</kbd></span></div>
+      <div><span>CWA boundaries on / off</span><span><kbd>Shift</kbd><kbd>K</kbd></span></div>
+      <div><span>Cursor readout on / off</span><span>tap right-click</span></div>
+      <div><span>Polygon from a SCIT cell</span><span><kbd>Shift</kbd>-click cell</span></div>
+      <div><span>Pick radar by typing</span><span><kbd>/</kbd></span></div>
+      <div><span>Basemap / counties</span><span><kbd>B</kbd> <kbd>K</kbd></span></div>
+      <div><span>Recenter on radar</span><span><kbd>M</kbd></span></div>
+    </div>
+    <p class="note">Cell track: press T, click the storm, the view steps back about 15 minutes, click the storm again. Shift-click adds more positions. Line track: press L, click along the line, Enter, then click where the marked center was on the earlier scan. Drag the white polygon's corners to edit it. VROT, max REF and max velocity are simple automatic estimates from the lowest tilt (no dealiasing); the recommendation rules are placeholders to be replaced with your storm-mode and VROT guidance.</p>
+  </div></div>
+  <div id="textview" hidden><div class="card" id="detail"></div></div>
+</main>
+<footer><span id="status">Starting…</span><span class="spacer"></span><span id="readout"></span></footer>
+</div>
+
+<script type="application/json" id="geo-data">/*GEO*/</script>
+<script type="application/json" id="county-data">/*COUNTIES*/</script>
+<script type="application/json" id="cwa-data">/*CWA*/</script>
+<script type="application/json" id="label-data">/*LABELS*/</script>
+<script type="application/json" id="place-data">/*PLACES*/</script>
+<script type="text/plain" id="worker-src">/*WORKER*/</script>
+<script>/*MAPLIBRE*/</script>
+<script>/*APP*/</script>
