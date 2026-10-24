@@ -25,7 +25,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 kbd { font: 600 10px var(--mono); padding: 1px 4px; border: 1px solid #44566a; border-bottom-width: 2px; border-radius: 3px; background: #1a2430; color: #cfe0ee; }
 button kbd { margin-left: 4px; opacity: .8; }
 #site { width: 64px; text-transform: uppercase; font-family: var(--mono); }
-#archive { width: 190px; }
+#archive { width: 150px; font-family: var(--mono); }
+#archive.bad { border-color: #ff5a5a; }
 #mode { font: 700 11px var(--mono); padding: 3px 7px; border-radius: 3px; background: #26313d; }
 #mode[data-kind="live"] { background: var(--live); color: #04140b; }
 #mode[data-kind="hist"] { background: #f0a030; color: #1b1000; }
@@ -121,7 +122,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
 .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 24px; }
 .keys div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #1c2733; }
 .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
-@media (max-width: 700px) { #archive { width: 140px; } .hide-sm { display: none; } }
+@media (max-width: 700px) { #archive { width: 130px; } .hide-sm { display: none; } }
 </style>
 
 <div id="app">
@@ -131,7 +132,8 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
     <span class="lbl">Radar</span>
     <input id="site" list="sites" maxlength="4" autocomplete="off" aria-label="Radar site">
     <datalist id="sites"></datalist>
-    <input id="archive" type="datetime-local" title="Archive case end time (UTC). Leave empty for live." aria-label="Archive time UTC">
+    <input id="archive" type="text" placeholder="YYYY-MM-DD HH:MM" maxlength="19" spellcheck="false" autocomplete="off" title="Archive case end time in UTC, 24-hour (e.g. 2013-05-20 20:15). Leave empty for live." aria-label="Archive end time, UTC, 24-hour"><span class="lbl">UTC</span>
+    <select id="frames" title="Number of volumes to load and loop. More frames use more memory (about 40 MB each)." aria-label="Frames"><option>6</option><option selected>8</option><option>12</option><option>16</option><option>24</option><option>32</option><option>48</option></select><span class="lbl">frames</span>
     <button type="submit">Load</button>
     <button type="button" id="golive" title="Clear archive time and go live">Live</button>
   </form>

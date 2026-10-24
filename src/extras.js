@@ -129,9 +129,9 @@ var RadarMenu = (function () {
   function choose(site) {
     close();
     if (!site) return;
-    $('site').value = site; $('archive').value = '';
+    $('site').value = site;
     try { localStorage.setItem('spcwarn.site', site); } catch (e) {}
-    loadSite(site, null);
+    loadSite(site, App.archiveEnd); // stay on the same archive case time when switching radars
   }
   function attach(panel) {
     var el = panel.map.getCanvasContainer();

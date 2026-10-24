@@ -1,4 +1,4 @@
-// NEXRAD Level II (Archive II / Message 31) decoder. Handles full volumes, real-time chunks,
+// NEXRAD Level II (Archive II, Message 31 and legacy pre-2008 Message 1) decoder. Handles full volumes, real-time chunks,
 // split cuts, SAILS / MESO-SAILS and MRLE supplemental cuts (each cut is kept as its own sweep).
 var Level2 = (function () {
   var MOMENTS = { REF: 1, VEL: 1, SW: 1, ZDR: 1, PHI: 1, RHO: 1 };
@@ -13,7 +13,10 @@ var Level2 = (function () {
   // Feed raw file/chunk bytes (Uint8Array). Returns object of touched elevation numbers.
   VolumeBuilder.prototype.feed = function (bytes) {
     var touched = {}, p = 0;
-    if (bytes.length >= 24 && bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56) {
+    // volume header: "AR2V00xx." (2000s on) or "ARCHIVE2." (1990s, often with a blank site ID)
+    var ar2v = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56;
+    var arch = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x43 && bytes[3] === 0x48 && bytes[7] === 0x32;
+    if (bytes.length >= 24 && (ar2v || arch)) {
       var hv = new DataView(bytes.buffer, bytes.byteOffset, 24);
       var jd = hv.getUint32(12), ms = hv.getUint32(16);
       if (this.volTime == null && jd > 0) this.volTime = (jd - 1) * 86400000 + ms;
@@ -47,6 +50,7 @@ var Level2 = (function () {
         p += 12 + sizeHW * 2;
       } else {
         if (type === 5 && !this.cutAngles) this.parse5(dv, p + 28);
+        else if (type === 1 && p + 2432 <= n) this.parse1(dv, p + 28, touched);
         p += 2432;
       }
     }
@@ -59,6 +63,39 @@ var Level2 = (function () {
     for (var i = 0; i < n; i++) cuts[i + 1] = Math.round(dv.getUint16(b + 22 + i * 46) * 180 / 32768 * 100) / 100;
     this.cutAngles = cuts;
     if (this.vcp == null) this.vcp = dv.getUint16(b + 4);
+  };
+
+  // Legacy Message 1 (before 2008): 1 degree radials, REF at 1 km gates, VEL / SW at 250 m. Pointers are relative to b.
+  VolumeBuilder.prototype.parse1 = function (dv, b, touched) {
+    var collMs = dv.getUint32(b), date = dv.getUint16(b + 4);
+    var az = dv.getUint16(b + 8) * 180 / 32768, status = dv.getUint16(b + 12);
+    var elev = dv.getUint16(b + 14) * 180 / 32768, elevNum = dv.getUint16(b + 16);
+    var firstS = dv.getInt16(b + 18), firstD = dv.getInt16(b + 20), sizeS = dv.getUint16(b + 22), sizeD = dv.getUint16(b + 24);
+    var nS = dv.getUint16(b + 26), nD = dv.getUint16(b + 28);
+    var pS = dv.getUint16(b + 36), pV = dv.getUint16(b + 38), pW = dv.getUint16(b + 40), velRes = dv.getUint16(b + 42);
+    if (!elevNum || elevNum > 40) return;
+    var t = (date - 1) * 86400000 + collMs;
+    if (this.volTime == null) this.volTime = t;
+    if (this.vcp == null) this.vcp = dv.getUint16(b + 44);
+    if (status === 4) this.complete = true;
+    var sw = this.sweeps[elevNum];
+    if (!sw) sw = this.sweeps[elevNum] = { elevNum: elevNum, res: 1, rows: 360, elevSum: 0, nrad: 0, time: t, endTime: t, nyquist: null, moments: {}, ended: false };
+    sw.elevSum += elev; sw.nrad++;
+    if (t < sw.time) sw.time = t; if (t > sw.endTime) sw.endTime = t;
+    if (status === 2 || status === 4) sw.ended = true;
+    var nyq = dv.getUint16(b + 60); if (nyq && sw.nyquist == null) sw.nyquist = nyq / 100;
+    var row = Math.floor(az) % 360;
+    touched[elevNum] = true;
+    function put(name, ptr, ng, first, spacing, scale, offset) {
+      if (!ptr || !ng || b + ptr + ng > dv.byteLength) return;
+      var m = sw.moments[name];
+      if (!m) m = sw.moments[name] = { ngates: ng, first: first, spacing: spacing, scale: scale, offset: offset, word: 8, data: new Uint8Array(360 * ng) };
+      var k = Math.min(ng, m.ngates);
+      m.data.set(new Uint8Array(dv.buffer, dv.byteOffset + b + ptr, k), row * m.ngates);
+    }
+    put('REF', pS, nS, firstS, sizeS, 2, 66);
+    put('VEL', pV, nD, firstD, sizeD, velRes === 4 ? 1 : 2, 129);
+    put('SW', pW, nD, firstD, sizeD, 2, 129);
   };
 
   VolumeBuilder.prototype.parse31 = function (dv, b, touched) {

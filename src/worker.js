@@ -9,7 +9,10 @@ function post(id, builder, elevNums, copy, extra) {
 async function getBytes(url) {
   var r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + url);
-  return new Uint8Array(await r.arrayBuffer());
+  var b = new Uint8Array(await r.arrayBuffer());
+  // archive files before about 2016 are whole-file gzip (.gz)
+  if (b[0] === 0x1f && b[1] === 0x8b) b = new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  return b;
 }
 self.onmessage = async function (ev) {
   var m = ev.data;

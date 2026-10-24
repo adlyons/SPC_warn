@@ -540,17 +540,34 @@ function init() {
   var dl = $('sites');
   Object.keys(RADARS).sort().forEach(function (s) { var o = document.createElement('option'); o.value = s; dl.appendChild(o); });
   var saved = null; try { saved = localStorage.getItem('spcwarn.site'); } catch (e) {}
-  var hashSite = (location.hash || '').replace('#', '').toUpperCase();
+  // URL hash: #KTLX for live, #KTLX/2013-05-20T20:15 for an archive case (UTC)
+  var hp = decodeURIComponent((location.hash || '').replace('#', '')).split('/'), hashSite = (hp[0] || '').toUpperCase();
+  var hashEnd = hp.length > 1 ? parseUTC(hp.slice(1).join('/')) : null;
+  if (hashEnd) $('archive').value = fmtUTC(hashEnd);
   App.site = RADARS[hashSite] ? hashSite : RADARS[saved] ? saved : 'KTLX';
   $('site').value = App.site;
   buildPanels();
   document.addEventListener('keydown', onKey);
   $('siteform').addEventListener('submit', function (e) {
     e.preventDefault();
-    var s = $('site').value.trim().toUpperCase(), when = $('archive').value;
+    var s = $('site').value.trim().toUpperCase(), when = $('archive').value.trim(), end = null;
+    if (when) {
+      end = parseUTC(when);
+      $('archive').classList.toggle('bad', end == null);
+      if (end == null) { toast('Archive time must be UTC, 24-hour: YYYY-MM-DD HH:MM'); return; }
+      $('archive').value = fmtUTC(end);
+    } else $('archive').classList.remove('bad');
     try { localStorage.setItem('spcwarn.site', s); } catch (er) {}
-    $('site').blur();
-    loadSite(s, when ? Date.parse(when + 'Z') : null);
+    $('site').blur(); $('archive').blur();
+    loadSite(s, end);
+  });
+  try { var fr = +localStorage.getItem('spcwarn.frames'); if (fr >= 6 && fr <= 48) { App.maxVols = fr; $('frames').value = String(fr); } } catch (er) {}
+  $('frames').addEventListener('change', function () {
+    App.maxVols = +$('frames').value;
+    try { localStorage.setItem('spcwarn.frames', String(App.maxVols)); } catch (er) {}
+    $('frames').blur();
+    toast(App.maxVols + ' frames' + (App.maxVols > 24 ? ' (uses a lot of memory, roughly ' + Math.round(App.maxVols * 0.04 * 10) / 10 + ' GB)' : ''));
+    loadSite(App.site, App.archiveEnd);
   });
   $('golive').addEventListener('click', function () { $('archive').value = ''; loadSite($('site').value.trim().toUpperCase(), null); });
   document.querySelectorAll('[data-prod]').forEach(function (b) { b.addEventListener('click', function () { setProduct(b.dataset.prod); }); });
@@ -570,7 +587,7 @@ function init() {
   $('help').addEventListener('click', function () { $('help').hidden = true; });
   setInterval(updateToolbar, 30000);
   Warn.init();
-  loadSite(App.site, null);
+  loadSite(App.site, hashEnd);
 }
 window.addEventListener('DOMContentLoaded', init);
 
@@ -612,3 +629,14 @@ var SrvBox = (function () {
   }
   return { init: init, toggle: toggle, fill: fill };
 })();
+
+// Archive time entry: UTC, 24-hour. Accepts "2013-05-20 20:15", "2013-05-20T2015", "20130520 2015", "2013/05/20 20:15:30", optional trailing Z.
+function parseUTC(s) {
+  var m = /^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[ T_]*(\d{2}):?(\d{2})(?::?(\d{2}))?\s*(?:z|utc)?$/i.exec(String(s).trim());
+  if (!m) return null;
+  var t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)), d = new Date(t);
+  if (d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) return null;
+  if (t < Date.UTC(1991, 5, 1) || t > Date.now() + 3600000) return null;
+  return t;
+}
+function fmtUTC(t) { var d = new Date(t), p = function (n) { return String(n).padStart(2, '0'); }; return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
