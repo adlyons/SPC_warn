@@ -9,6 +9,27 @@ var Data = (function () {
     for (var i = 0; i < STD_TILTS.length; i++) { var d = Math.abs(STD_TILTS[i] - e); if (d < bd) { bd = d; best = STD_TILTS[i]; } }
     return bd <= 0.22 ? best : Math.round(e * 10) / 10;
   }
+  // Elevation angles of the legacy VCPs (files without Message 5, mostly before 2008).
+  var VCP_ANGLES = {
+    11: [0.5, 1.45, 2.4, 3.35, 4.3, 5.25, 6.2, 7.5, 8.7, 10, 12, 14, 16.7, 19.5],
+    21: [0.5, 1.45, 2.4, 3.35, 4.3, 6.0, 9.9, 14.6, 19.5],
+    121: [0.5, 1.45, 2.4, 3.35, 4.3, 6.0, 9.9, 14.6, 19.5],
+    12: [0.5, 0.9, 1.3, 1.8, 2.4, 3.1, 4.0, 5.1, 6.4, 8.0, 10, 12.5, 15.6, 19.5],
+    31: [0.5, 1.5, 2.5, 3.5, 4.5], 32: [0.5, 1.5, 2.5, 3.5, 4.5]
+  };
+  // Nominal tilt of a sweep: the VCP's own cut angle when known, else the nearest standard angle.
+  function nominalFor(elev, vcp, cutAngle) {
+    if (cutAngle != null && Math.abs(cutAngle - elev) < 0.3) return Math.round(cutAngle * 10) / 10;
+    var a = VCP_ANGLES[vcp];
+    if (a) { var best = null, bd = 1e9; a.forEach(function (x) { var d = Math.abs(x - elev); if (d < bd) { bd = d; best = x; } }); if (bd < 0.35) return best; }
+    return nominal(elev + 0.04);
+  }
+  // Volume times available in the archive for one UTC day (ms, ascending).
+  async function listDay(site, dayMs) {
+    var doc = await listXML(ARCHIVE + '/?list-type=2&prefix=' + ymd(new Date(dayMs)) + '/' + site + '/');
+    return texts(doc, 'Key').filter(function (k) { return !/_MDM$/.test(k) && keyTime(k) != null; })
+      .map(function (k) { return { key: k, time: keyTime(k) }; }).sort(function (a, b) { return a.time - b.time; });
+  }
 
   async function listXML(url) {
     var r = await fetch(url, { cache: 'no-store' });
@@ -68,6 +89,6 @@ var Data = (function () {
     w.postMessage(msg);
   }
 
-  return { nominal: nominal, listArchive: listArchive, latestChunkDir: latestChunkDir, listChunks: listChunks,
+  return { nominal: nominal, nominalFor: nominalFor, listDay: listDay, listArchive: listArchive, latestChunkDir: latestChunkDir, listChunks: listChunks,
     chunkTime: chunkTime, keyTime: keyTime, initWorkers: initWorkers, request: request };
 })();

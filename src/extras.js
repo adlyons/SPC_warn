@@ -131,7 +131,8 @@ var RadarMenu = (function () {
     if (!site) return;
     $('site').value = site;
     try { localStorage.setItem('spcwarn.site', site); } catch (e) {}
-    loadSite(site, App.archiveEnd); // stay on the same archive case time when switching radars
+    if (App.archiveEnd) Scans.refresh(site, App.archiveEnd, true); // same archive case time on the new radar
+    else loadSite(site, null);
   }
   function attach(panel) {
     var el = panel.map.getCanvasContainer();

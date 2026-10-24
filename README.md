@@ -6,7 +6,7 @@ Single-file browser radar workstation: live NEXRAD Level II from AWS, decoded in
 Open `dist/spcwarn.html` in Chrome or Edge (double-click works, no server needed). Add `#KFWS` to the URL to start on another radar.
 
 ## Data
-- Archive volumes: `unidata-nexrad-level2`, 1991 to present. Type the case end time in UTC, 24-hour (`2013-05-20 20:15`) next to the radar ID, or open `index.html#KTLX/2013-05-20T20:15`. Older `.gz` files and the pre-2008 Message 1 format are decoded too. The Frames menu loads 6 to 48 volumes (about 40 MB of memory each for modern super-res data).
+- Archive volumes: `unidata-nexrad-level2`, 1991 to present. Pick a UTC date next to the radar ID; the scan menu then lists the actual volume times in the AWS archive for that radar and day (UTC, 24-hour), and the case loads ending at the scan you pick. `index.html#KTLX/2013-05-20T20:15` opens a case directly. Older `.gz` files and the pre-2008 Message 1 format are decoded too. The Frames menu loads 6 to 48 volumes (about 40 MB of memory each for modern super-res data). The tilt menu lists the cuts of the volume on screen.
 - Real time: `unidata-nexrad-level2-chunks`, polled every 10 s, so low tilts appear while the volume is still scanning.
 - Every cut is kept, including split cuts, SAILS / MESO-SAILS and MRLE rescans. Left/right steps through each scan at the current tilt.
 

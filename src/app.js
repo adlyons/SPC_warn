@@ -53,7 +53,7 @@ function mergeVolume(v, msg) {
     if (msg.meta.volTime) v.time = msg.meta.volTime;
     if (msg.meta.lat != null && (!App.radar || App.radar.site !== msg.meta.site)) setRadar(msg.meta);
   }
-  (msg.sweeps || []).forEach(function (s) { s.nominal = s.cutAngle != null && Math.abs(s.cutAngle - s.elev) < 0.3 ? Math.round(s.cutAngle * 10) / 10 : Data.nominal(s.elev + 0.04); s.vol = v; v.sweeps[s.elevNum] = s; });
+  (msg.sweeps || []).forEach(function (s) { s.nominal = Data.nominalFor(s.elev, msg.meta && msg.meta.vcp, s.cutAngle); s.vol = v; v.sweeps[s.elevNum] = s; });
   if (msg.sweeps && msg.sweeps.length) {
     App.version++;
     pruneVolumes();
@@ -98,9 +98,15 @@ function frames(product, tilt) {
   frameCache[key] = out;
   return out;
 }
+// Tilts of the volume on screen (its VCP), so the list never mixes VCPs or partial sweeps.
 function tilts() {
-  var set = {};
-  App.volumes.forEach(function (v) { for (var k in v.sweeps) set[v.sweeps[k].nominal] = 1; });
+  var set = {}, p = App.panels[App.active], v = p && p.frame && p.frame.vol, full = null;
+  App.volumes.forEach(function (x) { if (x.complete && Object.keys(x.sweeps).length) full = x; });
+  if (v && !v.complete && full) v = [full, v]; else v = [v || full];
+  v.forEach(function (x) {
+    if (!x) return;
+    for (var k in x.sweeps) { var s = x.sweeps[k]; if (s.nrad >= (s.res === 0.5 ? 600 : 300) || !x.complete) set[s.nominal] = 1; }
+  });
   return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
 }
 function frameFor(panel) {
@@ -271,7 +277,7 @@ function refreshPanel(p) {
   else p.layer.setFrame(null);
   var h = p.el;
   h.querySelector('.pprod').textContent = Colors.NAMES[p.product];
-  h.querySelector('.ptilt').textContent = App.tilt.toFixed(1) + '°';
+  h.querySelector('.ptilt').textContent = fmtTilt(App.tilt);
   h.querySelector('.ptime').textContent = f ? fmtZ(f.time) : 'no data at this tilt';
   var tag = '';
   if (f) {
@@ -418,7 +424,14 @@ function updateToolbar() {
   var p = App.panels[App.active];
   document.querySelectorAll('[data-prod]').forEach(function (b) { b.classList.toggle('on', !!p && b.dataset.prod === p.product); });
   document.querySelectorAll('[data-layout]').forEach(function (b) { b.classList.toggle('on', +b.dataset.layout === App.layout); });
-  $('tiltval').textContent = App.tilt.toFixed(1) + '°';
+  var tl = tilts(), sel = $('tiltsel'), sig = tl.join(',');
+  if (sel.dataset.sig !== sig) {
+    sel.dataset.sig = sig; sel.innerHTML = '';
+    tl.forEach(function (t) { var o = document.createElement('option'); o.value = String(t); o.textContent = fmtTilt(t); sel.appendChild(o); });
+  }
+  if (tl.indexOf(App.tilt) < 0) { var o2 = sel.querySelector('[data-extra]') || document.createElement('option'); o2.dataset.extra = '1'; o2.value = String(App.tilt); o2.textContent = fmtTilt(App.tilt); sel.appendChild(o2); }
+  else { var ex = sel.querySelector('[data-extra]'); if (ex) ex.remove(); }
+  sel.value = String(App.tilt);
   var t = latestDataTime();
   var live = App.archiveEnd == null;
   var lag = t ? Math.round((Date.now() - t) / 60000) : null;
@@ -543,24 +556,22 @@ function init() {
   // URL hash: #KTLX for live, #KTLX/2013-05-20T20:15 for an archive case (UTC)
   var hp = decodeURIComponent((location.hash || '').replace('#', '')).split('/'), hashSite = (hp[0] || '').toUpperCase();
   var hashEnd = hp.length > 1 ? parseUTC(hp.slice(1).join('/')) : null;
-  if (hashEnd) $('archive').value = fmtUTC(hashEnd);
+
   App.site = RADARS[hashSite] ? hashSite : RADARS[saved] ? saved : 'KTLX';
   $('site').value = App.site;
   buildPanels();
   document.addEventListener('keydown', onKey);
   $('siteform').addEventListener('submit', function (e) {
     e.preventDefault();
-    var s = $('site').value.trim().toUpperCase(), when = $('archive').value.trim(), end = null;
-    if (when) {
-      end = parseUTC(when);
-      $('archive').classList.toggle('bad', end == null);
-      if (end == null) { toast('Archive time must be UTC, 24-hour: YYYY-MM-DD HH:MM'); return; }
-      $('archive').value = fmtUTC(end);
-    } else $('archive').classList.remove('bad');
+    var s = $('site').value.trim().toUpperCase();
     try { localStorage.setItem('spcwarn.site', s); } catch (er) {}
-    $('site').blur(); $('archive').blur();
+    $('site').blur();
+    if (!$('adate').value) { loadSite(s, null); return; }
+    var end = +$('ascan').value || null;
+    if (s !== Scans.site || !end) { Scans.refresh(s, end || App.archiveEnd, true); return; }
     loadSite(s, end);
   });
+  Scans.init();
   try { var fr = +localStorage.getItem('spcwarn.frames'); if (fr >= 6 && fr <= 48) { App.maxVols = fr; $('frames').value = String(fr); } } catch (er) {}
   $('frames').addEventListener('change', function () {
     App.maxVols = +$('frames').value;
@@ -569,11 +580,12 @@ function init() {
     toast(App.maxVols + ' frames' + (App.maxVols > 24 ? ' (uses a lot of memory, roughly ' + Math.round(App.maxVols * 0.04 * 10) / 10 + ' GB)' : ''));
     loadSite(App.site, App.archiveEnd);
   });
-  $('golive').addEventListener('click', function () { $('archive').value = ''; loadSite($('site').value.trim().toUpperCase(), null); });
+  $('golive').addEventListener('click', function () { Scans.clear(); loadSite($('site').value.trim().toUpperCase(), null); });
   document.querySelectorAll('[data-prod]').forEach(function (b) { b.addEventListener('click', function () { setProduct(b.dataset.prod); }); });
   document.querySelectorAll('[data-layout]').forEach(function (b) { b.addEventListener('click', function () { setLayout(+b.dataset.layout); }); });
   $('tiltup').addEventListener('click', function () { stepTilt(1); });
   $('tiltdn').addEventListener('click', function () { stepTilt(-1); });
+  $('tiltsel').addEventListener('change', function () { App.tilt = +$('tiltsel').value; $('tiltsel').blur(); refreshAll(); });
   $('btn-cell').addEventListener('click', function () { Warn.start('cell'); });
   $('btn-line').addEventListener('click', function () { Warn.start('line'); });
   $('btn-warn').addEventListener('click', function () { Warn.openDialog(); });
@@ -587,7 +599,7 @@ function init() {
   $('help').addEventListener('click', function () { $('help').hidden = true; });
   setInterval(updateToolbar, 30000);
   Warn.init();
-  loadSite(App.site, hashEnd);
+  if (hashEnd) Scans.refresh(App.site, hashEnd, true); else loadSite(App.site, null);
 }
 window.addEventListener('DOMContentLoaded', init);
 
@@ -640,3 +652,41 @@ function parseUTC(s) {
   return t;
 }
 function fmtUTC(t) { var d = new Date(t), p = function (n) { return String(n).padStart(2, '0'); }; return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+function fmtTilt(t) { return (Math.round(t * 10 + 1e-6) / 10).toFixed(1) + '°'; }
+
+// Archive picker: a UTC day, then the actual volume scan times listed from the AWS archive for that radar and day.
+var Scans = (function () {
+  var S = { site: null, day: null, list: [], busy: 0 };
+  function dayOf(t) { var d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function hms(t) { return new Date(t).toISOString().slice(11, 19) + 'Z'; }
+  // List scans for site/day; select the scan at or just before `want`; load it when `load` is set.
+  async function refresh(site, want, load) {
+    site = (site || App.site).toUpperCase();
+    var day = want ? dayOf(want) : $('adate').value ? Date.parse($('adate').value + 'T00:00:00Z') : null;
+    if (day == null || isNaN(day)) return;
+    $('adate').value = new Date(day).toISOString().slice(0, 10);
+    var sel = $('ascan'), tok = ++S.busy;
+    sel.disabled = true; sel.innerHTML = '<option value="">Listing ' + site + '…</option>';
+    var list;
+    try { list = await Data.listDay(site, day); } catch (e) { sel.innerHTML = '<option value="">Listing failed</option>'; toast('Could not list the AWS archive: ' + e.message); return; }
+    if (tok !== S.busy) return;
+    S.site = site; S.day = day; S.list = list;
+    sel.innerHTML = '';
+    if (!list.length) { sel.innerHTML = '<option value="">No scans that day</option>'; toast('No ' + site + ' volumes in the AWS archive for ' + $('adate').value); return; }
+    list.forEach(function (k) { var o = document.createElement('option'); o.value = String(k.time); o.textContent = hms(k.time); sel.appendChild(o); });
+    var pick = list[list.length - 1];
+    if (want) { pick = list[0]; list.forEach(function (k) { if (k.time <= want + 30000) pick = k; }); }
+    sel.value = String(pick.time); sel.disabled = false;
+    if (load) loadSite(site, pick.time);
+  }
+  function clear() { S.busy++; S.site = null; S.list = []; $('adate').value = ''; var sel = $('ascan'); sel.innerHTML = '<option value="">Pick a date</option>'; sel.disabled = true; }
+  function init() {
+    $('adate').addEventListener('change', function () {
+      if (!$('adate').value) { clear(); return; }
+      var keep = App.archiveEnd ? App.archiveEnd - dayOf(App.archiveEnd) : 86400000 - 1; // same time of day, else the day's last scan
+      refresh($('site').value.trim().toUpperCase() || App.site, Date.parse($('adate').value + 'T00:00:00Z') + keep, true);
+    });
+    $('ascan').addEventListener('change', function () { var t = +$('ascan').value; $('ascan').blur(); if (t) loadSite(S.site || App.site, t); });
+  }
+  return { init: init, refresh: refresh, clear: clear, get site() { return S.site; } };
+})();

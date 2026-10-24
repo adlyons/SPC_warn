@@ -25,14 +25,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 kbd { font: 600 10px var(--mono); padding: 1px 4px; border: 1px solid #44566a; border-bottom-width: 2px; border-radius: 3px; background: #1a2430; color: #cfe0ee; }
 button kbd { margin-left: 4px; opacity: .8; }
 #site { width: 64px; text-transform: uppercase; font-family: var(--mono); }
-#archive { width: 150px; font-family: var(--mono); }
-#archive.bad { border-color: #ff5a5a; }
+#adate { width: 140px; font-family: var(--mono); color-scheme: dark; }
+#ascan { font-family: var(--mono); min-width: 120px; }
 #mode { font: 700 11px var(--mono); padding: 3px 7px; border-radius: 3px; background: #26313d; }
 #mode[data-kind="live"] { background: var(--live); color: #04140b; }
 #mode[data-kind="hist"] { background: #f0a030; color: #1b1000; }
 #logcount, .count { font: 700 11px var(--mono); background: #26313d; border-radius: 8px; padding: 0 6px; }
 #volinfo { color: var(--muted); font: 12px var(--mono); }
-#tiltval { font: 700 13px var(--mono); min-width: 44px; text-align: center; }
+#tiltsel { font: 700 13px var(--mono); min-width: 64px; }
 .spacer { flex: 1; }
 main { position: relative; flex: 1; min-height: 0; }
 #maps { position: absolute; inset: 0; display: grid; gap: 2px; background: #000; }
@@ -122,7 +122,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
 .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 24px; }
 .keys div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #1c2733; }
 .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
-@media (max-width: 700px) { #archive { width: 130px; } .hide-sm { display: none; } }
+@media (max-width: 700px) { #adate { width: 125px; } .hide-sm { display: none; } }
 </style>
 
 <div id="app">
@@ -132,7 +132,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
     <span class="lbl">Radar</span>
     <input id="site" list="sites" maxlength="4" autocomplete="off" aria-label="Radar site">
     <datalist id="sites"></datalist>
-    <input id="archive" type="text" placeholder="YYYY-MM-DD HH:MM" maxlength="19" spellcheck="false" autocomplete="off" title="Archive case end time in UTC, 24-hour (e.g. 2013-05-20 20:15). Leave empty for live." aria-label="Archive end time, UTC, 24-hour"><span class="lbl">UTC</span>
+    <span class="lbl">UTC</span><input id="adate" type="date" min="1991-06-01" title="Archive case date (UTC day). Leave empty for live." aria-label="Archive date, UTC"><select id="ascan" title="Volume scans in the AWS archive for this radar and UTC day. The case loads ending at the scan you pick." aria-label="Archive scan time, UTC" disabled><option value="">Pick a date</option></select>
     <select id="frames" title="Number of volumes to load and loop. More frames use more memory (about 40 MB each)." aria-label="Frames"><option>6</option><option selected>8</option><option>12</option><option>16</option><option>24</option><option>32</option><option>48</option></select><span class="lbl">frames</span>
     <button type="submit">Load</button>
     <button type="button" id="golive" title="Clear archive time and go live">Live</button>
@@ -145,7 +145,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div class="grp"><span class="lbl">Product</span>
     <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button id="btn-srvmo" title="Storm motion used for SRV (Shift+S). SCIT motion is the first guess.">Motion</button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
     <button data-prod="ZDR">ZDR<kbd>Z</kbd></button><button data-prod="RHO">CC<kbd>C</kbd></button><button data-prod="PHI" class="hide-sm">PHI<kbd>P</kbd></button></div>
-  <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><span id="tiltval">0.5°</span><button id="tiltup" aria-label="Tilt up">▲</button></div>
+  <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><select id="tiltsel" aria-label="Tilt"><option>0.5°</option></select><button id="tiltup" aria-label="Tilt up">▲</button></div>
   <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line. Shift-click a saved track later to make a polygon from it.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
     <button id="btn-help" aria-label="Keyboard shortcuts">?</button></div>
   <div class="grp"><span class="lbl">Log</span><button id="btn-export" title="Download every issued recommendation as GeoJSON">Export GeoJSON <span id="logcount" class="count">0</span><kbd>E</kbd></button><button id="btn-clearlog">Clear log</button></div>

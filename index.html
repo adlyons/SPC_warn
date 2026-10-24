@@ -27,13 +27,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 kbd { font: 600 10px var(--mono); padding: 1px 4px; border: 1px solid #44566a; border-bottom-width: 2px; border-radius: 3px; background: #1a2430; color: #cfe0ee; }
 button kbd { margin-left: 4px; opacity: .8; }
 #site { width: 64px; text-transform: uppercase; font-family: var(--mono); }
-#archive { width: 190px; }
+#adate { width: 140px; font-family: var(--mono); color-scheme: dark; }
+#ascan { font-family: var(--mono); min-width: 120px; }
 #mode { font: 700 11px var(--mono); padding: 3px 7px; border-radius: 3px; background: #26313d; }
 #mode[data-kind="live"] { background: var(--live); color: #04140b; }
 #mode[data-kind="hist"] { background: #f0a030; color: #1b1000; }
 #logcount, .count { font: 700 11px var(--mono); background: #26313d; border-radius: 8px; padding: 0 6px; }
 #volinfo { color: var(--muted); font: 12px var(--mono); }
-#tiltval { font: 700 13px var(--mono); min-width: 44px; text-align: center; }
+#tiltsel { font: 700 13px var(--mono); min-width: 64px; }
 .spacer { flex: 1; }
 main { position: relative; flex: 1; min-height: 0; }
 #maps { position: absolute; inset: 0; display: grid; gap: 2px; background: #000; }
@@ -123,7 +124,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
 .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 24px; }
 .keys div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #1c2733; }
 .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
-@media (max-width: 700px) { #archive { width: 140px; } .hide-sm { display: none; } }
+@media (max-width: 700px) { #adate { width: 125px; } .hide-sm { display: none; } }
 </style>
 
 <div id="app">
@@ -133,7 +134,8 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
     <span class="lbl">Radar</span>
     <input id="site" list="sites" maxlength="4" autocomplete="off" aria-label="Radar site">
     <datalist id="sites"></datalist>
-    <input id="archive" type="datetime-local" title="Archive case end time (UTC). Leave empty for live." aria-label="Archive time UTC">
+    <span class="lbl">UTC</span><input id="adate" type="date" min="1991-06-01" title="Archive case date (UTC day). Leave empty for live." aria-label="Archive date, UTC"><select id="ascan" title="Volume scans in the AWS archive for this radar and UTC day. The case loads ending at the scan you pick." aria-label="Archive scan time, UTC" disabled><option value="">Pick a date</option></select>
+    <select id="frames" title="Number of volumes to load and loop. More frames use more memory (about 40 MB each)." aria-label="Frames"><option>6</option><option selected>8</option><option>12</option><option>16</option><option>24</option><option>32</option><option>48</option></select><span class="lbl">frames</span>
     <button type="submit">Load</button>
     <button type="button" id="golive" title="Clear archive time and go live">Live</button>
   </form>
@@ -145,7 +147,7 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div class="grp"><span class="lbl">Product</span>
     <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button id="btn-srvmo" title="Storm motion used for SRV (Shift+S). SCIT motion is the first guess.">Motion</button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
     <button data-prod="ZDR">ZDR<kbd>Z</kbd></button><button data-prod="RHO">CC<kbd>C</kbd></button><button data-prod="PHI" class="hide-sm">PHI<kbd>P</kbd></button></div>
-  <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><span id="tiltval">0.5°</span><button id="tiltup" aria-label="Tilt up">▲</button></div>
+  <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><select id="tiltsel" aria-label="Tilt"><option>0.5°</option></select><button id="tiltup" aria-label="Tilt up">▲</button></div>
   <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line. Shift-click a saved track later to make a polygon from it.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
     <button id="btn-help" aria-label="Keyboard shortcuts">?</button></div>
   <div class="grp"><span class="lbl">Log</span><button id="btn-export" title="Download every issued recommendation as GeoJSON">Export GeoJSON <span id="logcount" class="count">0</span><kbd>E</kbd></button><button id="btn-clearlog">Clear log</button></div>
@@ -369,7 +371,7 @@ var Bzip2 = (function () {
 })();
 if (typeof module !== 'undefined') module.exports = Bzip2;
 
-// NEXRAD Level II (Archive II / Message 31) decoder. Handles full volumes, real-time chunks,
+// NEXRAD Level II (Archive II, Message 31 and legacy pre-2008 Message 1) decoder. Handles full volumes, real-time chunks,
 // split cuts, SAILS / MESO-SAILS and MRLE supplemental cuts (each cut is kept as its own sweep).
 var Level2 = (function () {
   var MOMENTS = { REF: 1, VEL: 1, SW: 1, ZDR: 1, PHI: 1, RHO: 1 };
@@ -384,7 +386,10 @@ var Level2 = (function () {
   // Feed raw file/chunk bytes (Uint8Array). Returns object of touched elevation numbers.
   VolumeBuilder.prototype.feed = function (bytes) {
     var touched = {}, p = 0;
-    if (bytes.length >= 24 && bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56) {
+    // volume header: "AR2V00xx." (2000s on) or "ARCHIVE2." (1990s, often with a blank site ID)
+    var ar2v = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56;
+    var arch = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x43 && bytes[3] === 0x48 && bytes[7] === 0x32;
+    if (bytes.length >= 24 && (ar2v || arch)) {
       var hv = new DataView(bytes.buffer, bytes.byteOffset, 24);
       var jd = hv.getUint32(12), ms = hv.getUint32(16);
       if (this.volTime == null && jd > 0) this.volTime = (jd - 1) * 86400000 + ms;
@@ -418,6 +423,7 @@ var Level2 = (function () {
         p += 12 + sizeHW * 2;
       } else {
         if (type === 5 && !this.cutAngles) this.parse5(dv, p + 28);
+        else if (type === 1 && p + 2432 <= n) this.parse1(dv, p + 28, touched);
         p += 2432;
       }
     }
@@ -430,6 +436,39 @@ var Level2 = (function () {
     for (var i = 0; i < n; i++) cuts[i + 1] = Math.round(dv.getUint16(b + 22 + i * 46) * 180 / 32768 * 100) / 100;
     this.cutAngles = cuts;
     if (this.vcp == null) this.vcp = dv.getUint16(b + 4);
+  };
+
+  // Legacy Message 1 (before 2008): 1 degree radials, REF at 1 km gates, VEL / SW at 250 m. Pointers are relative to b.
+  VolumeBuilder.prototype.parse1 = function (dv, b, touched) {
+    var collMs = dv.getUint32(b), date = dv.getUint16(b + 4);
+    var az = dv.getUint16(b + 8) * 180 / 32768, status = dv.getUint16(b + 12);
+    var elev = dv.getUint16(b + 14) * 180 / 32768, elevNum = dv.getUint16(b + 16);
+    var firstS = dv.getInt16(b + 18), firstD = dv.getInt16(b + 20), sizeS = dv.getUint16(b + 22), sizeD = dv.getUint16(b + 24);
+    var nS = dv.getUint16(b + 26), nD = dv.getUint16(b + 28);
+    var pS = dv.getUint16(b + 36), pV = dv.getUint16(b + 38), pW = dv.getUint16(b + 40), velRes = dv.getUint16(b + 42);
+    if (!elevNum || elevNum > 40) return;
+    var t = (date - 1) * 86400000 + collMs;
+    if (this.volTime == null) this.volTime = t;
+    if (this.vcp == null) this.vcp = dv.getUint16(b + 44);
+    if (status === 4) this.complete = true;
+    var sw = this.sweeps[elevNum];
+    if (!sw) sw = this.sweeps[elevNum] = { elevNum: elevNum, res: 1, rows: 360, elevSum: 0, nrad: 0, time: t, endTime: t, nyquist: null, moments: {}, ended: false };
+    sw.elevSum += elev; sw.nrad++;
+    if (t < sw.time) sw.time = t; if (t > sw.endTime) sw.endTime = t;
+    if (status === 2 || status === 4) sw.ended = true;
+    var nyq = dv.getUint16(b + 60); if (nyq && sw.nyquist == null) sw.nyquist = nyq / 100;
+    var row = Math.floor(az) % 360;
+    touched[elevNum] = true;
+    function put(name, ptr, ng, first, spacing, scale, offset) {
+      if (!ptr || !ng || b + ptr + ng > dv.byteLength) return;
+      var m = sw.moments[name];
+      if (!m) m = sw.moments[name] = { ngates: ng, first: first, spacing: spacing, scale: scale, offset: offset, word: 8, data: new Uint8Array(360 * ng) };
+      var k = Math.min(ng, m.ngates);
+      m.data.set(new Uint8Array(dv.buffer, dv.byteOffset + b + ptr, k), row * m.ngates);
+    }
+    put('REF', pS, nS, firstS, sizeS, 2, 66);
+    put('VEL', pV, nD, firstD, sizeD, velRes === 4 ? 1 : 2, 129);
+    put('SW', pW, nD, firstD, sizeD, 2, 129);
   };
 
   VolumeBuilder.prototype.parse31 = function (dv, b, touched) {
@@ -531,7 +570,10 @@ function post(id, builder, elevNums, copy, extra) {
 async function getBytes(url) {
   var r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + url);
-  return new Uint8Array(await r.arrayBuffer());
+  var b = new Uint8Array(await r.arrayBuffer());
+  // archive files before about 2016 are whole-file gzip (.gz)
+  if (b[0] === 0x1f && b[1] === 0x8b) b = new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  return b;
 }
 self.onmessage = async function (ev) {
   var m = ev.data;
@@ -740,7 +782,7 @@ var Bzip2 = (function () {
 })();
 if (typeof module !== 'undefined') module.exports = Bzip2;
 
-// NEXRAD Level II (Archive II / Message 31) decoder. Handles full volumes, real-time chunks,
+// NEXRAD Level II (Archive II, Message 31 and legacy pre-2008 Message 1) decoder. Handles full volumes, real-time chunks,
 // split cuts, SAILS / MESO-SAILS and MRLE supplemental cuts (each cut is kept as its own sweep).
 var Level2 = (function () {
   var MOMENTS = { REF: 1, VEL: 1, SW: 1, ZDR: 1, PHI: 1, RHO: 1 };
@@ -755,7 +797,10 @@ var Level2 = (function () {
   // Feed raw file/chunk bytes (Uint8Array). Returns object of touched elevation numbers.
   VolumeBuilder.prototype.feed = function (bytes) {
     var touched = {}, p = 0;
-    if (bytes.length >= 24 && bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56) {
+    // volume header: "AR2V00xx." (2000s on) or "ARCHIVE2." (1990s, often with a blank site ID)
+    var ar2v = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x32 && bytes[3] === 0x56;
+    var arch = bytes[0] === 0x41 && bytes[1] === 0x52 && bytes[2] === 0x43 && bytes[3] === 0x48 && bytes[7] === 0x32;
+    if (bytes.length >= 24 && (ar2v || arch)) {
       var hv = new DataView(bytes.buffer, bytes.byteOffset, 24);
       var jd = hv.getUint32(12), ms = hv.getUint32(16);
       if (this.volTime == null && jd > 0) this.volTime = (jd - 1) * 86400000 + ms;
@@ -789,6 +834,7 @@ var Level2 = (function () {
         p += 12 + sizeHW * 2;
       } else {
         if (type === 5 && !this.cutAngles) this.parse5(dv, p + 28);
+        else if (type === 1 && p + 2432 <= n) this.parse1(dv, p + 28, touched);
         p += 2432;
       }
     }
@@ -801,6 +847,39 @@ var Level2 = (function () {
     for (var i = 0; i < n; i++) cuts[i + 1] = Math.round(dv.getUint16(b + 22 + i * 46) * 180 / 32768 * 100) / 100;
     this.cutAngles = cuts;
     if (this.vcp == null) this.vcp = dv.getUint16(b + 4);
+  };
+
+  // Legacy Message 1 (before 2008): 1 degree radials, REF at 1 km gates, VEL / SW at 250 m. Pointers are relative to b.
+  VolumeBuilder.prototype.parse1 = function (dv, b, touched) {
+    var collMs = dv.getUint32(b), date = dv.getUint16(b + 4);
+    var az = dv.getUint16(b + 8) * 180 / 32768, status = dv.getUint16(b + 12);
+    var elev = dv.getUint16(b + 14) * 180 / 32768, elevNum = dv.getUint16(b + 16);
+    var firstS = dv.getInt16(b + 18), firstD = dv.getInt16(b + 20), sizeS = dv.getUint16(b + 22), sizeD = dv.getUint16(b + 24);
+    var nS = dv.getUint16(b + 26), nD = dv.getUint16(b + 28);
+    var pS = dv.getUint16(b + 36), pV = dv.getUint16(b + 38), pW = dv.getUint16(b + 40), velRes = dv.getUint16(b + 42);
+    if (!elevNum || elevNum > 40) return;
+    var t = (date - 1) * 86400000 + collMs;
+    if (this.volTime == null) this.volTime = t;
+    if (this.vcp == null) this.vcp = dv.getUint16(b + 44);
+    if (status === 4) this.complete = true;
+    var sw = this.sweeps[elevNum];
+    if (!sw) sw = this.sweeps[elevNum] = { elevNum: elevNum, res: 1, rows: 360, elevSum: 0, nrad: 0, time: t, endTime: t, nyquist: null, moments: {}, ended: false };
+    sw.elevSum += elev; sw.nrad++;
+    if (t < sw.time) sw.time = t; if (t > sw.endTime) sw.endTime = t;
+    if (status === 2 || status === 4) sw.ended = true;
+    var nyq = dv.getUint16(b + 60); if (nyq && sw.nyquist == null) sw.nyquist = nyq / 100;
+    var row = Math.floor(az) % 360;
+    touched[elevNum] = true;
+    function put(name, ptr, ng, first, spacing, scale, offset) {
+      if (!ptr || !ng || b + ptr + ng > dv.byteLength) return;
+      var m = sw.moments[name];
+      if (!m) m = sw.moments[name] = { ngates: ng, first: first, spacing: spacing, scale: scale, offset: offset, word: 8, data: new Uint8Array(360 * ng) };
+      var k = Math.min(ng, m.ngates);
+      m.data.set(new Uint8Array(dv.buffer, dv.byteOffset + b + ptr, k), row * m.ngates);
+    }
+    put('REF', pS, nS, firstS, sizeS, 2, 66);
+    put('VEL', pV, nD, firstD, sizeD, velRes === 4 ? 1 : 2, 129);
+    put('SW', pW, nD, firstD, sizeD, 2, 129);
   };
 
   VolumeBuilder.prototype.parse31 = function (dv, b, touched) {
@@ -1127,6 +1206,27 @@ var Data = (function () {
     for (var i = 0; i < STD_TILTS.length; i++) { var d = Math.abs(STD_TILTS[i] - e); if (d < bd) { bd = d; best = STD_TILTS[i]; } }
     return bd <= 0.22 ? best : Math.round(e * 10) / 10;
   }
+  // Elevation angles of the legacy VCPs (files without Message 5, mostly before 2008).
+  var VCP_ANGLES = {
+    11: [0.5, 1.45, 2.4, 3.35, 4.3, 5.25, 6.2, 7.5, 8.7, 10, 12, 14, 16.7, 19.5],
+    21: [0.5, 1.45, 2.4, 3.35, 4.3, 6.0, 9.9, 14.6, 19.5],
+    121: [0.5, 1.45, 2.4, 3.35, 4.3, 6.0, 9.9, 14.6, 19.5],
+    12: [0.5, 0.9, 1.3, 1.8, 2.4, 3.1, 4.0, 5.1, 6.4, 8.0, 10, 12.5, 15.6, 19.5],
+    31: [0.5, 1.5, 2.5, 3.5, 4.5], 32: [0.5, 1.5, 2.5, 3.5, 4.5]
+  };
+  // Nominal tilt of a sweep: the VCP's own cut angle when known, else the nearest standard angle.
+  function nominalFor(elev, vcp, cutAngle) {
+    if (cutAngle != null && Math.abs(cutAngle - elev) < 0.3) return Math.round(cutAngle * 10) / 10;
+    var a = VCP_ANGLES[vcp];
+    if (a) { var best = null, bd = 1e9; a.forEach(function (x) { var d = Math.abs(x - elev); if (d < bd) { bd = d; best = x; } }); if (bd < 0.35) return best; }
+    return nominal(elev + 0.04);
+  }
+  // Volume times available in the archive for one UTC day (ms, ascending).
+  async function listDay(site, dayMs) {
+    var doc = await listXML(ARCHIVE + '/?list-type=2&prefix=' + ymd(new Date(dayMs)) + '/' + site + '/');
+    return texts(doc, 'Key').filter(function (k) { return !/_MDM$/.test(k) && keyTime(k) != null; })
+      .map(function (k) { return { key: k, time: keyTime(k) }; }).sort(function (a, b) { return a.time - b.time; });
+  }
 
   async function listXML(url) {
     var r = await fetch(url, { cache: 'no-store' });
@@ -1186,7 +1286,7 @@ var Data = (function () {
     w.postMessage(msg);
   }
 
-  return { nominal: nominal, listArchive: listArchive, latestChunkDir: latestChunkDir, listChunks: listChunks,
+  return { nominal: nominal, nominalFor: nominalFor, listDay: listDay, listArchive: listArchive, latestChunkDir: latestChunkDir, listChunks: listChunks,
     chunkTime: chunkTime, keyTime: keyTime, initWorkers: initWorkers, request: request };
 })();
 
@@ -2359,9 +2459,10 @@ var RadarMenu = (function () {
   function choose(site) {
     close();
     if (!site) return;
-    $('site').value = site; $('archive').value = '';
+    $('site').value = site;
     try { localStorage.setItem('spcwarn.site', site); } catch (e) {}
-    loadSite(site, null);
+    if (App.archiveEnd) Scans.refresh(site, App.archiveEnd, true); // same archive case time on the new radar
+    else loadSite(site, null);
   }
   function attach(panel) {
     var el = panel.map.getCanvasContainer();
@@ -2555,7 +2656,7 @@ function mergeVolume(v, msg) {
     if (msg.meta.volTime) v.time = msg.meta.volTime;
     if (msg.meta.lat != null && (!App.radar || App.radar.site !== msg.meta.site)) setRadar(msg.meta);
   }
-  (msg.sweeps || []).forEach(function (s) { s.nominal = s.cutAngle != null && Math.abs(s.cutAngle - s.elev) < 0.3 ? Math.round(s.cutAngle * 10) / 10 : Data.nominal(s.elev + 0.04); s.vol = v; v.sweeps[s.elevNum] = s; });
+  (msg.sweeps || []).forEach(function (s) { s.nominal = Data.nominalFor(s.elev, msg.meta && msg.meta.vcp, s.cutAngle); s.vol = v; v.sweeps[s.elevNum] = s; });
   if (msg.sweeps && msg.sweeps.length) {
     App.version++;
     pruneVolumes();
@@ -2600,9 +2701,15 @@ function frames(product, tilt) {
   frameCache[key] = out;
   return out;
 }
+// Tilts of the volume on screen (its VCP), so the list never mixes VCPs or partial sweeps.
 function tilts() {
-  var set = {};
-  App.volumes.forEach(function (v) { for (var k in v.sweeps) set[v.sweeps[k].nominal] = 1; });
+  var set = {}, p = App.panels[App.active], v = p && p.frame && p.frame.vol, full = null;
+  App.volumes.forEach(function (x) { if (x.complete && Object.keys(x.sweeps).length) full = x; });
+  if (v && !v.complete && full) v = [full, v]; else v = [v || full];
+  v.forEach(function (x) {
+    if (!x) return;
+    for (var k in x.sweeps) { var s = x.sweeps[k]; if (s.nrad >= (s.res === 0.5 ? 600 : 300) || !x.complete) set[s.nominal] = 1; }
+  });
   return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
 }
 function frameFor(panel) {
@@ -2773,7 +2880,7 @@ function refreshPanel(p) {
   else p.layer.setFrame(null);
   var h = p.el;
   h.querySelector('.pprod').textContent = Colors.NAMES[p.product];
-  h.querySelector('.ptilt').textContent = App.tilt.toFixed(1) + '°';
+  h.querySelector('.ptilt').textContent = fmtTilt(App.tilt);
   h.querySelector('.ptime').textContent = f ? fmtZ(f.time) : 'no data at this tilt';
   var tag = '';
   if (f) {
@@ -2920,7 +3027,14 @@ function updateToolbar() {
   var p = App.panels[App.active];
   document.querySelectorAll('[data-prod]').forEach(function (b) { b.classList.toggle('on', !!p && b.dataset.prod === p.product); });
   document.querySelectorAll('[data-layout]').forEach(function (b) { b.classList.toggle('on', +b.dataset.layout === App.layout); });
-  $('tiltval').textContent = App.tilt.toFixed(1) + '°';
+  var tl = tilts(), sel = $('tiltsel'), sig = tl.join(',');
+  if (sel.dataset.sig !== sig) {
+    sel.dataset.sig = sig; sel.innerHTML = '';
+    tl.forEach(function (t) { var o = document.createElement('option'); o.value = String(t); o.textContent = fmtTilt(t); sel.appendChild(o); });
+  }
+  if (tl.indexOf(App.tilt) < 0) { var o2 = sel.querySelector('[data-extra]') || document.createElement('option'); o2.dataset.extra = '1'; o2.value = String(App.tilt); o2.textContent = fmtTilt(App.tilt); sel.appendChild(o2); }
+  else { var ex = sel.querySelector('[data-extra]'); if (ex) ex.remove(); }
+  sel.value = String(App.tilt);
   var t = latestDataTime();
   var live = App.archiveEnd == null;
   var lag = t ? Math.round((Date.now() - t) / 60000) : null;
@@ -3042,23 +3156,39 @@ function init() {
   var dl = $('sites');
   Object.keys(RADARS).sort().forEach(function (s) { var o = document.createElement('option'); o.value = s; dl.appendChild(o); });
   var saved = null; try { saved = localStorage.getItem('spcwarn.site'); } catch (e) {}
-  var hashSite = (location.hash || '').replace('#', '').toUpperCase();
+  // URL hash: #KTLX for live, #KTLX/2013-05-20T20:15 for an archive case (UTC)
+  var hp = decodeURIComponent((location.hash || '').replace('#', '')).split('/'), hashSite = (hp[0] || '').toUpperCase();
+  var hashEnd = hp.length > 1 ? parseUTC(hp.slice(1).join('/')) : null;
+
   App.site = RADARS[hashSite] ? hashSite : RADARS[saved] ? saved : 'KTLX';
   $('site').value = App.site;
   buildPanels();
   document.addEventListener('keydown', onKey);
   $('siteform').addEventListener('submit', function (e) {
     e.preventDefault();
-    var s = $('site').value.trim().toUpperCase(), when = $('archive').value;
+    var s = $('site').value.trim().toUpperCase();
     try { localStorage.setItem('spcwarn.site', s); } catch (er) {}
     $('site').blur();
-    loadSite(s, when ? Date.parse(when + 'Z') : null);
+    if (!$('adate').value) { loadSite(s, null); return; }
+    var end = +$('ascan').value || null;
+    if (s !== Scans.site || !end) { Scans.refresh(s, end || App.archiveEnd, true); return; }
+    loadSite(s, end);
   });
-  $('golive').addEventListener('click', function () { $('archive').value = ''; loadSite($('site').value.trim().toUpperCase(), null); });
+  Scans.init();
+  try { var fr = +localStorage.getItem('spcwarn.frames'); if (fr >= 6 && fr <= 48) { App.maxVols = fr; $('frames').value = String(fr); } } catch (er) {}
+  $('frames').addEventListener('change', function () {
+    App.maxVols = +$('frames').value;
+    try { localStorage.setItem('spcwarn.frames', String(App.maxVols)); } catch (er) {}
+    $('frames').blur();
+    toast(App.maxVols + ' frames' + (App.maxVols > 24 ? ' (uses a lot of memory, roughly ' + Math.round(App.maxVols * 0.04 * 10) / 10 + ' GB)' : ''));
+    loadSite(App.site, App.archiveEnd);
+  });
+  $('golive').addEventListener('click', function () { Scans.clear(); loadSite($('site').value.trim().toUpperCase(), null); });
   document.querySelectorAll('[data-prod]').forEach(function (b) { b.addEventListener('click', function () { setProduct(b.dataset.prod); }); });
   document.querySelectorAll('[data-layout]').forEach(function (b) { b.addEventListener('click', function () { setLayout(+b.dataset.layout); }); });
   $('tiltup').addEventListener('click', function () { stepTilt(1); });
   $('tiltdn').addEventListener('click', function () { stepTilt(-1); });
+  $('tiltsel').addEventListener('change', function () { App.tilt = +$('tiltsel').value; $('tiltsel').blur(); refreshAll(); });
   $('btn-cell').addEventListener('click', function () { Warn.start('cell'); });
   $('btn-line').addEventListener('click', function () { Warn.start('line'); });
   $('btn-warn').addEventListener('click', function () { Warn.openDialog(); });
@@ -3072,7 +3202,7 @@ function init() {
   $('help').addEventListener('click', function () { $('help').hidden = true; });
   setInterval(updateToolbar, 30000);
   Warn.init();
-  loadSite(App.site, null);
+  if (hashEnd) Scans.refresh(App.site, hashEnd, true); else loadSite(App.site, null);
 }
 window.addEventListener('DOMContentLoaded', init);
 
@@ -3113,6 +3243,55 @@ var SrvBox = (function () {
     });
   }
   return { init: init, toggle: toggle, fill: fill };
+})();
+
+// Archive time entry: UTC, 24-hour. Accepts "2013-05-20 20:15", "2013-05-20T2015", "20130520 2015", "2013/05/20 20:15:30", optional trailing Z.
+function parseUTC(s) {
+  var m = /^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[ T_]*(\d{2}):?(\d{2})(?::?(\d{2}))?\s*(?:z|utc)?$/i.exec(String(s).trim());
+  if (!m) return null;
+  var t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)), d = new Date(t);
+  if (d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) return null;
+  if (t < Date.UTC(1991, 5, 1) || t > Date.now() + 3600000) return null;
+  return t;
+}
+function fmtUTC(t) { var d = new Date(t), p = function (n) { return String(n).padStart(2, '0'); }; return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+function fmtTilt(t) { return (Math.round(t * 10 + 1e-6) / 10).toFixed(1) + '°'; }
+
+// Archive picker: a UTC day, then the actual volume scan times listed from the AWS archive for that radar and day.
+var Scans = (function () {
+  var S = { site: null, day: null, list: [], busy: 0 };
+  function dayOf(t) { var d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function hms(t) { return new Date(t).toISOString().slice(11, 19) + 'Z'; }
+  // List scans for site/day; select the scan at or just before `want`; load it when `load` is set.
+  async function refresh(site, want, load) {
+    site = (site || App.site).toUpperCase();
+    var day = want ? dayOf(want) : $('adate').value ? Date.parse($('adate').value + 'T00:00:00Z') : null;
+    if (day == null || isNaN(day)) return;
+    $('adate').value = new Date(day).toISOString().slice(0, 10);
+    var sel = $('ascan'), tok = ++S.busy;
+    sel.disabled = true; sel.innerHTML = '<option value="">Listing ' + site + '…</option>';
+    var list;
+    try { list = await Data.listDay(site, day); } catch (e) { sel.innerHTML = '<option value="">Listing failed</option>'; toast('Could not list the AWS archive: ' + e.message); return; }
+    if (tok !== S.busy) return;
+    S.site = site; S.day = day; S.list = list;
+    sel.innerHTML = '';
+    if (!list.length) { sel.innerHTML = '<option value="">No scans that day</option>'; toast('No ' + site + ' volumes in the AWS archive for ' + $('adate').value); return; }
+    list.forEach(function (k) { var o = document.createElement('option'); o.value = String(k.time); o.textContent = hms(k.time); sel.appendChild(o); });
+    var pick = list[list.length - 1];
+    if (want) { pick = list[0]; list.forEach(function (k) { if (k.time <= want + 30000) pick = k; }); }
+    sel.value = String(pick.time); sel.disabled = false;
+    if (load) loadSite(site, pick.time);
+  }
+  function clear() { S.busy++; S.site = null; S.list = []; $('adate').value = ''; var sel = $('ascan'); sel.innerHTML = '<option value="">Pick a date</option>'; sel.disabled = true; }
+  function init() {
+    $('adate').addEventListener('change', function () {
+      if (!$('adate').value) { clear(); return; }
+      var keep = App.archiveEnd ? App.archiveEnd - dayOf(App.archiveEnd) : 86400000 - 1; // same time of day, else the day's last scan
+      refresh($('site').value.trim().toUpperCase() || App.site, Date.parse($('adate').value + 'T00:00:00Z') + keep, true);
+    });
+    $('ascan').addEventListener('change', function () { var t = +$('ascan').value; $('ascan').blur(); if (t) loadSite(S.site || App.site, t); });
+  }
+  return { init: init, refresh: refresh, clear: clear, get site() { return S.site; } };
 })();
 </script>
 
