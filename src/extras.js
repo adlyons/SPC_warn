@@ -21,7 +21,7 @@ var Scit = (function () {
     return keys.map(function (k) { return { key: k, time: keyTime(k) }; }).filter(function (k) { return k.time; }).sort(function (a, b) { return a.time - b.time; });
   }
   async function sync() {
-    if (!S.on || S.busy || !App.radar) return;
+    if (!(S.on || srvShown()) || S.busy || !App.radar) return;
     S.busy = true;
     try {
       var t = targetTime(), site = App.radar.site, day = new Date(t).toISOString().slice(0, 10);
@@ -39,12 +39,15 @@ var Scit = (function () {
         d.key = pick.key;
         S.cache[pick.key] = d; S.current = d;
       }
-      $('btn-scit').title = S.current ? 'SCIT from ' + fmtZ(S.current.time) + ' (' + S.current.storms.length + ' cells)' : 'No SCIT product near this scan';
+      if (srvShown()) App.panels.forEach(function (p) { if (p.product === 'SRV') refreshPanel(p); });
+    if (!$('srvbox').hidden) SrvBox.fill();
+    $('btn-scit').title = S.current ? 'SCIT from ' + fmtZ(S.current.time) + ' (' + S.current.storms.length + ' cells)' : 'No SCIT product near this scan';
     } catch (e) { console.warn('SCIT', e); toast('SCIT tracks unavailable: ' + e.message); }
     S.busy = false;
     App.panels.forEach(drawOverlay);
-    if (S.on && S.current && S.current.key && targetTime() - S.current.time > 6 * 60000 && !App.archiveEnd) setTimeout(sync, 60000);
+    if ((S.on || srvShown()) && S.current && S.current.key && targetTime() - S.current.time > 6 * 60000 && !App.archiveEnd) setTimeout(sync, 60000);
   }
+  function srvShown() { return App.panels.some(function (p) { return p.product === 'SRV'; }); }
   function toggle() {
     S.on = !S.on; App.scitOn = S.on;
     $('btn-scit').classList.toggle('on', S.on);
@@ -81,13 +84,20 @@ var Scit = (function () {
     if (!n) return null; u /= n; v /= n;
     return { from: (Math.atan2(u, v) * 180 / Math.PI + 180 + 360) % 360, kt: Math.hypot(u, v) * 1.943844 };
   }
+  // SCIT storm motion for SRV: the NST storm-average motion, else the SCIT adaptation default, else the mean of cell forecasts
+  function motion() {
+    var d = S.current; if (!d) return null;
+    if (d.avg && d.avg.kt > 0) return { from: d.avg.from, kt: d.avg.kt, src: 'SCIT avg' };
+    if (d.dflt) return { from: d.dflt.from, kt: d.dflt.kt, src: 'SCIT default' };
+    var m = meanMotion(); return m ? { from: m.from, kt: m.kt, src: 'SCIT mean' } : null;
+  }
   function pick(p, pt) {
     var d = S.on && S.current; if (!d) return null;
     var ref = { lat: d.lat, lon: d.lon }, best = null, bd = 12;
     d.storms.forEach(function (s) { var g = Geo.fromXY(ref, s.pos[0] * 1000, s.pos[1] * 1000), q = p.map.project([g.lon, g.lat]), dd = Math.hypot(q.x - pt.x, q.y - pt.y); if (dd < bd) { bd = dd; best = s; } });
     return best ? { storm: best, data: d } : null;
   }
-  return { toggle: toggle, sync: sync, draw: draw, meanMotion: meanMotion, pick: pick, _S: S };
+  return { toggle: toggle, sync: sync, draw: draw, meanMotion: meanMotion, motion: motion, pick: pick, _S: S };
 })();
 
 var RadarMenu = (function () {

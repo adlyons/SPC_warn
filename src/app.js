@@ -224,7 +224,10 @@ function buildPanels() {
       map.getCanvas().addEventListener('mouseleave', function () { App.mouse = null; updateReadout(); });
       map.on('click', function (e) {
         setActive(panel.idx);
-        if (e.originalEvent.shiftKey && !Warn.phase()) { var sc = Scit.pick(panel, e.point); if (sc) { Warn.fromScit(sc.storm, sc.data); return; } }
+        if (e.originalEvent.shiftKey && !Warn.phase()) {
+          var ti = Warn.pickTrack(panel, e.point); if (ti >= 0) { Warn.fromTrack(ti); return; }
+          var sc = Scit.pick(panel, e.point); if (sc) { Warn.fromScit(sc.storm, sc.data); return; }
+        }
         Warn.onClick(panel, e);
       });
       el.addEventListener('mousedown', function () { setActive(panel.idx); });
@@ -252,6 +255,7 @@ function setLayout(n) {
 function setProduct(prod) {
   var p = App.panels[App.active]; if (!p) return;
   p.product = prod; refreshPanel(p); updateToolbar();
+  if (prod === 'SRV') Scit.sync();
 }
 var refreshPending = false;
 function scheduleRefresh() {
@@ -314,6 +318,7 @@ function updateReadout() {
     if (po && po._inside) box.innerHTML += '\n\n<b>ProbSevere ' + po.ps + '%</b>  Tor ' + po.tor + '%  Hail ' + po.hail + '%  Wind ' + po.wind + '%\n' + po.lines.slice(1, 7).join('\n');
     var sc = Scit._S.on && App.mousePt && Scit.pick(hp, App.mousePt);
     if (sc) box.innerHTML += '\n\nSCIT ' + sc.storm.id + ': Shift-click for a polygon';
+    if (App.mousePt && Warn._W.tracks.length && Warn.pickTrack(hp, App.mousePt) >= 0) box.innerHTML += '\n\nYour track: Shift-click for a polygon';
     var host = $('maps').getBoundingClientRect(), mx = App.mousePx.x - host.left, my = App.mousePx.y - host.top;
     box.hidden = false;
     var bw = box.offsetWidth, bh = box.offsetHeight;
@@ -503,6 +508,7 @@ function onKey(e) {
   else if (k === ' ') toggleLoop();
   else if (k === '1' || k === '2' || k === '4') setLayout(+k);
   else if (k === 'Tab') setActive((App.active + (e.shiftKey ? App.layout - 1 : 1)) % App.layout);
+  else if (lk === 's' && e.shiftKey) SrvBox.toggle();
   else if (PRODUCT_KEYS[lk] && !e.shiftKey) setProduct(PRODUCT_KEYS[lk]);
   else if (lk === 't') Warn.start('cell');
   else if (lk === 'g') Warn.start(e.shiftKey ? 'line' : 'cell', true);
@@ -556,6 +562,7 @@ function init() {
   $('btn-warn').addEventListener('click', function () { Warn.openDialog(); });
   $('btn-trackonly').addEventListener('click', function (e) { Warn.start(e.shiftKey ? 'line' : 'cell', true); });
   $('btn-scit').addEventListener('click', function () { Scit.toggle(); });
+  SrvBox.init();
   $('btn-psev').addEventListener('click', function () { PSev.toggle(); });
   $('btn-cleartracks').addEventListener('click', function () { Warn.clearTracks(); });
   RadarMenu.init();
@@ -566,3 +573,42 @@ function init() {
   loadSite(App.site, null);
 }
 window.addEventListener('DOMContentLoaded', init);
+
+// SRV storm motion box: SCIT (default first guess), latest user track, or a typed motion.
+App.srvSource = 'scit'; App.srvManual = null;
+var SrvBox = (function () {
+  function fmt(m) { return m ? String(Math.round(m.from)).padStart(3, '0') + '/' + Math.round(m.kt) + ' kt' : null; }
+  function trackMo() { var W = Warn._W, t = W.motion || (W.tracks.length && W.tracks[W.tracks.length - 1].motion); return t || null; }
+  function fill() {
+    var sm = Scit.motion(), tm = trackMo();
+    $('srv-scit').textContent = sm ? fmt(sm) + (sm.src === 'SCIT avg' ? ' avg' : sm.src === 'SCIT default' ? ' default' : ' mean') : 'none loaded';
+    $('srv-track').textContent = fmt(tm) || 'no track yet';
+    document.querySelectorAll('#srvbox [name=srvsrc]').forEach(function (e) { e.checked = e.value === App.srvSource; });
+    if (App.srvSource !== 'manual') { var g = Vel.motion(); $('srv-dir').value = g ? Math.round(g.from) : ''; $('srv-kt').value = g ? Math.round(g.kt) : ''; }
+  }
+  function apply() {
+    var src = (document.querySelector('#srvbox [name=srvsrc]:checked') || {}).value || 'scit';
+    if (src === 'manual') {
+      var d = parseFloat($('srv-dir').value), k = parseFloat($('srv-kt').value);
+      if (!isFinite(d) || !isFinite(k) || k < 0) return;
+      App.srvManual = { from: ((d % 360) + 360) % 360, kt: k };
+    }
+    App.srvSource = src;
+    App.panels.forEach(function (p) { if (p.product === 'SRV') refreshPanel(p); });
+    fill();
+  }
+  function toggle(show) {
+    var box = $('srvbox'); box.hidden = show == null ? !box.hidden : !show;
+    if (!box.hidden) { Scit.sync(); fill(); }
+  }
+  function init() {
+    $('btn-srvmo').addEventListener('click', function () { toggle(); });
+    $('srv-close').addEventListener('click', function () { toggle(false); });
+    document.querySelectorAll('#srvbox [name=srvsrc]').forEach(function (e) { e.addEventListener('change', apply); });
+    ['srv-dir', 'srv-kt'].forEach(function (id) {
+      $(id).addEventListener('input', function () { document.querySelector('#srvbox [value=manual]').checked = true; apply(); });
+      $(id).addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Escape' || e.key === 'Enter') $(id).blur(); });
+    });
+  }
+  return { init: init, toggle: toggle, fill: fill };
+})();

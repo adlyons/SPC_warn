@@ -51,6 +51,13 @@ main { position: relative; flex: 1; min-height: 0; }
 footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; background: var(--panel); border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
 #status[data-kind="error"] { color: #ff8a7a; }
 #prompt { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(10,16,22,.94); border: 1px solid #fff; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px; max-width: 80%; text-align: center; }
+#srvbox { position: absolute; z-index: 6; top: 8px; right: 8px; width: 270px; background: rgba(10,15,20,.96); border: 1px solid #3a4c60; border-radius: 6px; padding: 8px 10px; font: 12px var(--mono); display: grid; gap: 6px; }
+#srvbox .sbhead { display: flex; justify-content: space-between; align-items: center; }
+#srvbox .sbhead button { padding: 0 6px; }
+#srvbox label { display: flex; align-items: center; gap: 6px; }
+#srvbox label span { color: var(--muted); margin-left: auto; }
+#srvbox input[type=text], #srvbox #srv-dir, #srvbox #srv-kt { width: 3.2em; padding: 2px 4px; text-align: right; }
+#srvbox .note { color: var(--muted); font-size: 11px; }
 #cursorbox { position: absolute; z-index: 5; pointer-events: none; background: rgba(6,10,14,.9); border: 1px solid #3a4c60; border-radius: 4px; padding: 4px 7px; font: 11.5px/1.4 var(--mono); color: #e6edf3; white-space: pre; }
 #cursorbox b { color: #fff; font-size: 12.5px; }
 #radarmenu { position: absolute; z-index: 10; width: 230px; background: var(--panel); border: 1px solid #44566a; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.6); padding: 6px; display: flex; flex-direction: column; gap: 4px; }
@@ -134,10 +141,10 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div class="grp"><span class="lbl">Panels</span>
     <button data-layout="1">1<kbd>1</kbd></button><button data-layout="2">2<kbd>2</kbd></button><button data-layout="4">4<kbd>4</kbd></button></div>
   <div class="grp"><span class="lbl">Product</span>
-    <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
+    <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button id="btn-srvmo" title="Storm motion used for SRV (Shift+S). SCIT motion is the first guess.">Motion</button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
     <button data-prod="ZDR">ZDR<kbd>Z</kbd></button><button data-prod="RHO">CC<kbd>C</kbd></button><button data-prod="PHI" class="hide-sm">PHI<kbd>P</kbd></button></div>
   <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><span id="tiltval">0.5°</span><button id="tiltup" aria-label="Tilt up">▲</button></div>
-  <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
+  <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line. Shift-click a saved track later to make a polygon from it.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
     <button id="btn-help" aria-label="Keyboard shortcuts">?</button></div>
   <div class="grp"><span class="lbl">Log</span><button id="btn-export" title="Download every issued recommendation as GeoJSON">Export GeoJSON <span id="logcount" class="count">0</span><kbd>E</kbd></button><button id="btn-clearlog">Clear log</button></div>
 </header>
@@ -146,6 +153,13 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div id="prompt" hidden></div>
   <div id="toast" hidden></div>
   <div id="cursorbox" hidden></div>
+  <div id="srvbox" hidden>
+    <div class="sbhead"><b>SRV storm motion</b><button id="srv-close" type="button" aria-label="Close">×</button></div>
+    <label><input type="radio" name="srvsrc" value="scit"> SCIT <span id="srv-scit">none loaded</span></label>
+    <label><input type="radio" name="srvsrc" value="track"> My track <span id="srv-track">no track yet</span></label>
+    <label><input type="radio" name="srvsrc" value="manual"> Manual <input id="srv-dir" inputmode="numeric" maxlength="3" aria-label="Motion from, degrees">° / <input id="srv-kt" inputmode="numeric" maxlength="3" aria-label="Motion speed, knots"> kt</label>
+    <div class="note">Direction is where the storm moves from. Manual starts from the SCIT value.</div>
+  </div>
   <div id="radarmenu" hidden><input id="rm-search" placeholder="Type a radar ID" autocomplete="off" aria-label="Search radars"><div id="rm-list"></div></div>
   <div id="issued-wrap" hidden><div id="issued"></div></div>
 
@@ -216,11 +230,13 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
       <div><span>CWA boundaries on / off</span><span><kbd>Shift</kbd><kbd>K</kbd></span></div>
       <div><span>Cursor readout on / off</span><span>tap right-click</span></div>
       <div><span>Polygon from a SCIT cell</span><span><kbd>Shift</kbd>-click cell</span></div>
+      <div><span>Polygon from one of your G tracks</span><span><kbd>Shift</kbd>-click track</span></div>
+      <div><span>SRV storm motion box</span><span><kbd>Shift</kbd><kbd>S</kbd></span></div>
       <div><span>Pick radar by typing</span><span><kbd>/</kbd></span></div>
       <div><span>Basemap / counties</span><span><kbd>B</kbd> <kbd>K</kbd></span></div>
       <div><span>Recenter on radar</span><span><kbd>M</kbd></span></div>
     </div>
-    <p class="note">Cell track: press T, click the storm, the view steps back about 15 minutes, click the storm again. Shift-click adds more positions. Line track: press L, click along the line, Enter, then click where the marked center was on the earlier scan. Drag the white polygon's corners to edit it. VROT, max REF and max velocity are simple automatic estimates from the lowest tilt (no dealiasing); the recommendation rules are placeholders to be replaced with your storm-mode and VROT guidance.</p>
+    <p class="note">Cell track: press T, click the storm, the view steps back about 15 minutes, click the storm again. Shift-click adds more positions. Line track: press L, draw the line on the current scan, Enter, then draw the same line on the earlier scan. Track only (G) saves a track with its pathcast; Shift-click it later to turn it into a polygon. SRV uses the SCIT storm motion by default; change it with Shift+S. Drag the white polygon's corners to edit it. Max REF and max velocity are simple automatic estimates from the lowest tilt; the recommendation rules are placeholders to be replaced with your storm-mode and VROT guidance.</p>
   </div></div>
   <div id="textview" hidden><div class="card" id="detail"></div></div>
 </main>

@@ -57,6 +57,16 @@ var Warn = (function () {
   }
   function clear() { W.phase = null; W.mode = null; W.pts = []; W.line = []; W.polygon = null; W.motion = null; W.tracks = []; prompt(''); if (W.open) closeDialog(); redraw(); toast('Tracks and polygon cleared'); }
   function clearTracks() { W.tracks = []; redraw(); toast('Your storm tracks were cleared'); if (App.panels.some(function (p) { return p.product === 'SRV'; })) refreshAll(); }
+  // Saved track under the mouse (its current position or any pathcast point), for Shift-click to polygon.
+  function pickTrack(panel, pt) {
+    var tnow = issueTime(), best = -1, bd = 14;
+    W.tracks.forEach(function (tr, i) {
+      for (var k = 0; k <= 4; k++) trackAt(tnow + k * 15 * 60000, tr).forEach(function (p) {
+        var q = panel.map.project([p.lon, p.lat]), d = Math.hypot(q.x - pt.x, q.y - pt.y); if (d < bd) { bd = d; best = i; }
+      });
+    });
+    return best;
+  }
   // Build a recommendation polygon from a SCIT cell: current NST position and its 15-minute forecast position.
   function fromScit(s, d) {
     if (!s.fcst.length) { toast('SCIT cell ' + s.id + ' has no forecast track'); return; }
@@ -71,11 +81,14 @@ var Warn = (function () {
     openDialog(true);
     toast('Polygon built from SCIT cell ' + s.id + ' (' + Math.round(W.motion.from) + '°/' + Math.round(W.motion.kt) + ' kt). Edit motion or corners as needed.');
   }
-  // Turn the most recent manual track into a recommendation.
-  function warnFromTrack() {
-    var tr = W.tracks[W.tracks.length - 1]; if (!tr) return false;
+  // Turn a saved manual (G) track into a recommendation; defaults to the most recent one.
+  function warnFromTrack(idx) {
+    if (idx == null) idx = W.tracks.length - 1;
+    var tr = W.tracks[idx]; if (!tr) return false;
+    if (W.open) closeDialog();
+    W.phase = null; W.trackOnly = false; W.followId = null; W.followForm = null; W.scitId = null;
     W.mode = tr.mode; W.pts = tr.pts.slice(); W.line = tr.line.slice(); W.line2 = (tr.line2 || []).slice(); W.lineT = tr.lineT; W.past = tr.past; W.motion = { from: tr.motion.from, kt: tr.motion.kt }; W.t1 = tr.t1;
-    W.tracks.pop();
+    W.tracks.splice(idx, 1);
     W.T0 = issueTime(); computeDiag();
     build(recommend(autoMode(), W.diag.vrot).duration);
     openDialog(true);
@@ -158,7 +171,7 @@ var Warn = (function () {
       W.tracks.push({ mode: W.mode, pts: W.pts.slice(), line: W.line.slice(), line2: (W.line2 || []).slice(), lineT: W.lineT, past: W.past, motion: W.motion, t1: W.t1 });
       W.mode = null; W.pts = []; W.line = []; W.past = null; W.motion = null; W.trackOnly = false;
       var tr = W.tracks[W.tracks.length - 1];
-      toast('Track saved: from ' + Math.round(tr.motion.from) + '° at ' + Math.round(tr.motion.kt) + ' kt. Press D to make a recommendation from it, Shift+X to clear tracks.');
+      toast('Track saved: from ' + Math.round(tr.motion.from) + '° at ' + Math.round(tr.motion.kt) + ' kt. Shift-click it (or press D) to make a recommendation polygon from it. Shift+X clears tracks.');
       redraw(); return;
     }
     W.T0 = issueTime();
@@ -894,5 +907,5 @@ var Warn = (function () {
     setInterval(renderIssued, 30000);
   }
   return { init: init, start: start, cancel: cancel, clear: clear, enter: enter, onClick: onClick, onMouseDown: onMouseDown, onMouseMove: onMouseMove,
-    onMouseUp: onMouseUp, draw: draw, clearTracks: clearTracks, fromScit: fromScit, phase: function () { return W.phase; }, openDialog: function () { openDialog(false); }, dialogOpen: function () { return W.open; }, dialogKey: dialogKey, renderIssued: renderIssued, exportGeoJSON: exportGeoJSON, _W: W };
+    onMouseUp: onMouseUp, draw: draw, clearTracks: clearTracks, fromScit: fromScit, pickTrack: pickTrack, fromTrack: warnFromTrack, phase: function () { return W.phase; }, openDialog: function () { openDialog(false); }, dialogOpen: function () { return W.open; }, dialogKey: dialogKey, renderIssued: renderIssued, exportGeoJSON: exportGeoJSON, _W: W };
 })();

@@ -53,6 +53,13 @@ main { position: relative; flex: 1; min-height: 0; }
 footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; background: var(--panel); border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
 #status[data-kind="error"] { color: #ff8a7a; }
 #prompt { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; background: rgba(10,16,22,.94); border: 1px solid #fff; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px; max-width: 80%; text-align: center; }
+#srvbox { position: absolute; z-index: 6; top: 8px; right: 8px; width: 270px; background: rgba(10,15,20,.96); border: 1px solid #3a4c60; border-radius: 6px; padding: 8px 10px; font: 12px var(--mono); display: grid; gap: 6px; }
+#srvbox .sbhead { display: flex; justify-content: space-between; align-items: center; }
+#srvbox .sbhead button { padding: 0 6px; }
+#srvbox label { display: flex; align-items: center; gap: 6px; }
+#srvbox label span { color: var(--muted); margin-left: auto; }
+#srvbox input[type=text], #srvbox #srv-dir, #srvbox #srv-kt { width: 3.2em; padding: 2px 4px; text-align: right; }
+#srvbox .note { color: var(--muted); font-size: 11px; }
 #cursorbox { position: absolute; z-index: 5; pointer-events: none; background: rgba(6,10,14,.9); border: 1px solid #3a4c60; border-radius: 4px; padding: 4px 7px; font: 11.5px/1.4 var(--mono); color: #e6edf3; white-space: pre; }
 #cursorbox b { color: #fff; font-size: 12.5px; }
 #radarmenu { position: absolute; z-index: 10; width: 230px; background: var(--panel); border: 1px solid #44566a; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.6); padding: 6px; display: flex; flex-direction: column; gap: 4px; }
@@ -136,10 +143,10 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div class="grp"><span class="lbl">Panels</span>
     <button data-layout="1">1<kbd>1</kbd></button><button data-layout="2">2<kbd>2</kbd></button><button data-layout="4">4<kbd>4</kbd></button></div>
   <div class="grp"><span class="lbl">Product</span>
-    <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
+    <button data-prod="REF">REF<kbd>R</kbd></button><button data-prod="VEL">VEL<kbd>V</kbd></button><button data-prod="SRV">SRV<kbd>S</kbd></button><button id="btn-srvmo" title="Storm motion used for SRV (Shift+S). SCIT motion is the first guess.">Motion</button><button data-prod="SW" class="hide-sm">SW<kbd>W</kbd></button>
     <button data-prod="ZDR">ZDR<kbd>Z</kbd></button><button data-prod="RHO">CC<kbd>C</kbd></button><button data-prod="PHI" class="hide-sm">PHI<kbd>P</kbd></button></div>
   <div class="grp"><span class="lbl">Tilt</span><button id="tiltdn" aria-label="Tilt down">▼</button><span id="tiltval">0.5°</span><button id="tiltup" aria-label="Tilt up">▲</button></div>
-  <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
+  <div class="grp"><button id="btn-cell">Track cell<kbd>T</kbd></button><button id="btn-line">Track line<kbd>L</kbd></button><button id="btn-trackonly" title="Track a storm and show its pathcast without making a polygon. Shift+G for a line. Shift-click a saved track later to make a polygon from it.">Track only<kbd>G</kbd></button><button id="btn-cleartracks" title="Clear your storm tracks (Shift+X)">Clear tracks</button><button id="btn-scit" title="Toggle SCIT storm tracks (Level III NST). Shift-click a SCIT cell to build a polygon from it.">SCIT<kbd>I</kbd></button><button id="btn-psev" title="Toggle ProbSevere objects">ProbSevere<kbd>O</kbd></button><button id="btn-warn">Recommend<kbd>D</kbd></button>
     <button id="btn-help" aria-label="Keyboard shortcuts">?</button></div>
   <div class="grp"><span class="lbl">Log</span><button id="btn-export" title="Download every issued recommendation as GeoJSON">Export GeoJSON <span id="logcount" class="count">0</span><kbd>E</kbd></button><button id="btn-clearlog">Clear log</button></div>
 </header>
@@ -148,6 +155,13 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
   <div id="prompt" hidden></div>
   <div id="toast" hidden></div>
   <div id="cursorbox" hidden></div>
+  <div id="srvbox" hidden>
+    <div class="sbhead"><b>SRV storm motion</b><button id="srv-close" type="button" aria-label="Close">×</button></div>
+    <label><input type="radio" name="srvsrc" value="scit"> SCIT <span id="srv-scit">none loaded</span></label>
+    <label><input type="radio" name="srvsrc" value="track"> My track <span id="srv-track">no track yet</span></label>
+    <label><input type="radio" name="srvsrc" value="manual"> Manual <input id="srv-dir" inputmode="numeric" maxlength="3" aria-label="Motion from, degrees">° / <input id="srv-kt" inputmode="numeric" maxlength="3" aria-label="Motion speed, knots"> kt</label>
+    <div class="note">Direction is where the storm moves from. Manual starts from the SCIT value.</div>
+  </div>
   <div id="radarmenu" hidden><input id="rm-search" placeholder="Type a radar ID" autocomplete="off" aria-label="Search radars"><div id="rm-list"></div></div>
   <div id="issued-wrap" hidden><div id="issued"></div></div>
 
@@ -218,11 +232,13 @@ footer { display: flex; gap: 16px; align-items: center; padding: 4px 10px; backg
       <div><span>CWA boundaries on / off</span><span><kbd>Shift</kbd><kbd>K</kbd></span></div>
       <div><span>Cursor readout on / off</span><span>tap right-click</span></div>
       <div><span>Polygon from a SCIT cell</span><span><kbd>Shift</kbd>-click cell</span></div>
+      <div><span>Polygon from one of your G tracks</span><span><kbd>Shift</kbd>-click track</span></div>
+      <div><span>SRV storm motion box</span><span><kbd>Shift</kbd><kbd>S</kbd></span></div>
       <div><span>Pick radar by typing</span><span><kbd>/</kbd></span></div>
       <div><span>Basemap / counties</span><span><kbd>B</kbd> <kbd>K</kbd></span></div>
       <div><span>Recenter on radar</span><span><kbd>M</kbd></span></div>
     </div>
-    <p class="note">Cell track: press T, click the storm, the view steps back about 15 minutes, click the storm again. Shift-click adds more positions. Line track: press L, click along the line, Enter, then click where the marked center was on the earlier scan. Drag the white polygon's corners to edit it. VROT, max REF and max velocity are simple automatic estimates from the lowest tilt (no dealiasing); the recommendation rules are placeholders to be replaced with your storm-mode and VROT guidance.</p>
+    <p class="note">Cell track: press T, click the storm, the view steps back about 15 minutes, click the storm again. Shift-click adds more positions. Line track: press L, draw the line on the current scan, Enter, then draw the same line on the earlier scan. Track only (G) saves a track with its pathcast; Shift-click it later to turn it into a polygon. SRV uses the SCIT storm motion by default; change it with Shift+S. Drag the white polygon's corners to edit it. Max REF and max velocity are simple automatic estimates from the lowest tilt; the recommendation rules are placeholders to be replaced with your storm-mode and VROT guidance.</p>
   </div></div>
   <div id="textview" hidden><div class="card" id="detail"></div></div>
 </main>
@@ -922,6 +938,12 @@ var Level3 = (function () {
       p = lend;
     }
     out.storms = out.storms.filter(function (s) { return s.pos; });
+    // tabular block: storm-average motion and the SCIT adaptation default motion (both "from" direction)
+    var txt = ''; for (var k = 0; k < bytes.length; k++) { var c = bytes[k]; txt += c >= 32 && c < 127 ? String.fromCharCode(c) : ' '; }
+    var m = /AVG SPEED\s+(\d+)\s+KTS\s+AVG DIRECTION\s+(\d+)\s+DEG/.exec(txt);
+    if (m) out.avg = { from: +m[2] % 360, kt: +m[1] };
+    var dd = /([\d.]+)\s+\(DEG\)\s+DEFAULT \(DIRECTION\)/.exec(txt), ds = /([\d.]+)\s+\(KTS\)\s+DEFAULT \(SPEED\)/.exec(txt);
+    if (dd && ds) out.dflt = { from: +dd[1] % 360, kt: +ds[1] };
     return out;
   }
   return { parseNST: parseNST };
@@ -1256,13 +1278,17 @@ var Vel = (function () {
     sw._deal = { src: m, m: res, wind: { u: ringU, v: ringV } };
     return res;
   }
-  // Storm motion used for SRV: active warning track, latest manual track, else SCIT mean motion.
-  function motion() {
+  // Storm motion used for SRV. SCIT motion is the first guess; the user can switch to their track or type a motion (SRV motion box).
+  function trackMotion() {
     var W = Warn._W;
     if (W.motion) return { from: W.motion.from, kt: W.motion.kt, src: 'track' };
     if (W.tracks.length) { var t = W.tracks[W.tracks.length - 1]; return { from: t.motion.from, kt: t.motion.kt, src: 'track' }; }
-    var sm = Scit.meanMotion(); if (sm) return { from: sm.from, kt: sm.kt, src: 'SCIT mean' };
     return null;
+  }
+  function motion() {
+    if (App.srvSource === 'manual' && App.srvManual) return { from: App.srvManual.from, kt: App.srvManual.kt, src: 'manual' };
+    if (App.srvSource === 'track') { var tm = trackMotion(); if (tm) return tm; }
+    return Scit.motion() || trackMotion();
   }
   function srv(sw) {
     var base = App.dealias ? dealias(sw) : sw.moments.VEL; if (!base) return null;
@@ -1349,6 +1375,16 @@ var Warn = (function () {
   }
   function clear() { W.phase = null; W.mode = null; W.pts = []; W.line = []; W.polygon = null; W.motion = null; W.tracks = []; prompt(''); if (W.open) closeDialog(); redraw(); toast('Tracks and polygon cleared'); }
   function clearTracks() { W.tracks = []; redraw(); toast('Your storm tracks were cleared'); if (App.panels.some(function (p) { return p.product === 'SRV'; })) refreshAll(); }
+  // Saved track under the mouse (its current position or any pathcast point), for Shift-click to polygon.
+  function pickTrack(panel, pt) {
+    var tnow = issueTime(), best = -1, bd = 14;
+    W.tracks.forEach(function (tr, i) {
+      for (var k = 0; k <= 4; k++) trackAt(tnow + k * 15 * 60000, tr).forEach(function (p) {
+        var q = panel.map.project([p.lon, p.lat]), d = Math.hypot(q.x - pt.x, q.y - pt.y); if (d < bd) { bd = d; best = i; }
+      });
+    });
+    return best;
+  }
   // Build a recommendation polygon from a SCIT cell: current NST position and its 15-minute forecast position.
   function fromScit(s, d) {
     if (!s.fcst.length) { toast('SCIT cell ' + s.id + ' has no forecast track'); return; }
@@ -1363,11 +1399,14 @@ var Warn = (function () {
     openDialog(true);
     toast('Polygon built from SCIT cell ' + s.id + ' (' + Math.round(W.motion.from) + '°/' + Math.round(W.motion.kt) + ' kt). Edit motion or corners as needed.');
   }
-  // Turn the most recent manual track into a recommendation.
-  function warnFromTrack() {
-    var tr = W.tracks[W.tracks.length - 1]; if (!tr) return false;
+  // Turn a saved manual (G) track into a recommendation; defaults to the most recent one.
+  function warnFromTrack(idx) {
+    if (idx == null) idx = W.tracks.length - 1;
+    var tr = W.tracks[idx]; if (!tr) return false;
+    if (W.open) closeDialog();
+    W.phase = null; W.trackOnly = false; W.followId = null; W.followForm = null; W.scitId = null;
     W.mode = tr.mode; W.pts = tr.pts.slice(); W.line = tr.line.slice(); W.line2 = (tr.line2 || []).slice(); W.lineT = tr.lineT; W.past = tr.past; W.motion = { from: tr.motion.from, kt: tr.motion.kt }; W.t1 = tr.t1;
-    W.tracks.pop();
+    W.tracks.splice(idx, 1);
     W.T0 = issueTime(); computeDiag();
     build(recommend(autoMode(), W.diag.vrot).duration);
     openDialog(true);
@@ -1450,7 +1489,7 @@ var Warn = (function () {
       W.tracks.push({ mode: W.mode, pts: W.pts.slice(), line: W.line.slice(), line2: (W.line2 || []).slice(), lineT: W.lineT, past: W.past, motion: W.motion, t1: W.t1 });
       W.mode = null; W.pts = []; W.line = []; W.past = null; W.motion = null; W.trackOnly = false;
       var tr = W.tracks[W.tracks.length - 1];
-      toast('Track saved: from ' + Math.round(tr.motion.from) + '° at ' + Math.round(tr.motion.kt) + ' kt. Press D to make a recommendation from it, Shift+X to clear tracks.');
+      toast('Track saved: from ' + Math.round(tr.motion.from) + '° at ' + Math.round(tr.motion.kt) + ' kt. Shift-click it (or press D) to make a recommendation polygon from it. Shift+X clears tracks.');
       redraw(); return;
     }
     W.T0 = issueTime();
@@ -2186,7 +2225,7 @@ var Warn = (function () {
     setInterval(renderIssued, 30000);
   }
   return { init: init, start: start, cancel: cancel, clear: clear, enter: enter, onClick: onClick, onMouseDown: onMouseDown, onMouseMove: onMouseMove,
-    onMouseUp: onMouseUp, draw: draw, clearTracks: clearTracks, fromScit: fromScit, phase: function () { return W.phase; }, openDialog: function () { openDialog(false); }, dialogOpen: function () { return W.open; }, dialogKey: dialogKey, renderIssued: renderIssued, exportGeoJSON: exportGeoJSON, _W: W };
+    onMouseUp: onMouseUp, draw: draw, clearTracks: clearTracks, fromScit: fromScit, pickTrack: pickTrack, fromTrack: warnFromTrack, phase: function () { return W.phase; }, openDialog: function () { openDialog(false); }, dialogOpen: function () { return W.open; }, dialogKey: dialogKey, renderIssued: renderIssued, exportGeoJSON: exportGeoJSON, _W: W };
 })();
 
 // SCIT storm tracks from the Level III NST product, and the right-click-hold radar menu.
@@ -2212,7 +2251,7 @@ var Scit = (function () {
     return keys.map(function (k) { return { key: k, time: keyTime(k) }; }).filter(function (k) { return k.time; }).sort(function (a, b) { return a.time - b.time; });
   }
   async function sync() {
-    if (!S.on || S.busy || !App.radar) return;
+    if (!(S.on || srvShown()) || S.busy || !App.radar) return;
     S.busy = true;
     try {
       var t = targetTime(), site = App.radar.site, day = new Date(t).toISOString().slice(0, 10);
@@ -2230,12 +2269,15 @@ var Scit = (function () {
         d.key = pick.key;
         S.cache[pick.key] = d; S.current = d;
       }
-      $('btn-scit').title = S.current ? 'SCIT from ' + fmtZ(S.current.time) + ' (' + S.current.storms.length + ' cells)' : 'No SCIT product near this scan';
+      if (srvShown()) App.panels.forEach(function (p) { if (p.product === 'SRV') refreshPanel(p); });
+    if (!$('srvbox').hidden) SrvBox.fill();
+    $('btn-scit').title = S.current ? 'SCIT from ' + fmtZ(S.current.time) + ' (' + S.current.storms.length + ' cells)' : 'No SCIT product near this scan';
     } catch (e) { console.warn('SCIT', e); toast('SCIT tracks unavailable: ' + e.message); }
     S.busy = false;
     App.panels.forEach(drawOverlay);
-    if (S.on && S.current && S.current.key && targetTime() - S.current.time > 6 * 60000 && !App.archiveEnd) setTimeout(sync, 60000);
+    if ((S.on || srvShown()) && S.current && S.current.key && targetTime() - S.current.time > 6 * 60000 && !App.archiveEnd) setTimeout(sync, 60000);
   }
+  function srvShown() { return App.panels.some(function (p) { return p.product === 'SRV'; }); }
   function toggle() {
     S.on = !S.on; App.scitOn = S.on;
     $('btn-scit').classList.toggle('on', S.on);
@@ -2272,13 +2314,20 @@ var Scit = (function () {
     if (!n) return null; u /= n; v /= n;
     return { from: (Math.atan2(u, v) * 180 / Math.PI + 180 + 360) % 360, kt: Math.hypot(u, v) * 1.943844 };
   }
+  // SCIT storm motion for SRV: the NST storm-average motion, else the SCIT adaptation default, else the mean of cell forecasts
+  function motion() {
+    var d = S.current; if (!d) return null;
+    if (d.avg && d.avg.kt > 0) return { from: d.avg.from, kt: d.avg.kt, src: 'SCIT avg' };
+    if (d.dflt) return { from: d.dflt.from, kt: d.dflt.kt, src: 'SCIT default' };
+    var m = meanMotion(); return m ? { from: m.from, kt: m.kt, src: 'SCIT mean' } : null;
+  }
   function pick(p, pt) {
     var d = S.on && S.current; if (!d) return null;
     var ref = { lat: d.lat, lon: d.lon }, best = null, bd = 12;
     d.storms.forEach(function (s) { var g = Geo.fromXY(ref, s.pos[0] * 1000, s.pos[1] * 1000), q = p.map.project([g.lon, g.lat]), dd = Math.hypot(q.x - pt.x, q.y - pt.y); if (dd < bd) { bd = dd; best = s; } });
     return best ? { storm: best, data: d } : null;
   }
-  return { toggle: toggle, sync: sync, draw: draw, meanMotion: meanMotion, pick: pick, _S: S };
+  return { toggle: toggle, sync: sync, draw: draw, meanMotion: meanMotion, motion: motion, pick: pick, _S: S };
 })();
 
 var RadarMenu = (function () {
@@ -2677,7 +2726,10 @@ function buildPanels() {
       map.getCanvas().addEventListener('mouseleave', function () { App.mouse = null; updateReadout(); });
       map.on('click', function (e) {
         setActive(panel.idx);
-        if (e.originalEvent.shiftKey && !Warn.phase()) { var sc = Scit.pick(panel, e.point); if (sc) { Warn.fromScit(sc.storm, sc.data); return; } }
+        if (e.originalEvent.shiftKey && !Warn.phase()) {
+          var ti = Warn.pickTrack(panel, e.point); if (ti >= 0) { Warn.fromTrack(ti); return; }
+          var sc = Scit.pick(panel, e.point); if (sc) { Warn.fromScit(sc.storm, sc.data); return; }
+        }
         Warn.onClick(panel, e);
       });
       el.addEventListener('mousedown', function () { setActive(panel.idx); });
@@ -2705,6 +2757,7 @@ function setLayout(n) {
 function setProduct(prod) {
   var p = App.panels[App.active]; if (!p) return;
   p.product = prod; refreshPanel(p); updateToolbar();
+  if (prod === 'SRV') Scit.sync();
 }
 var refreshPending = false;
 function scheduleRefresh() {
@@ -2767,6 +2820,7 @@ function updateReadout() {
     if (po && po._inside) box.innerHTML += '\n\n<b>ProbSevere ' + po.ps + '%</b>  Tor ' + po.tor + '%  Hail ' + po.hail + '%  Wind ' + po.wind + '%\n' + po.lines.slice(1, 7).join('\n');
     var sc = Scit._S.on && App.mousePt && Scit.pick(hp, App.mousePt);
     if (sc) box.innerHTML += '\n\nSCIT ' + sc.storm.id + ': Shift-click for a polygon';
+    if (App.mousePt && Warn._W.tracks.length && Warn.pickTrack(hp, App.mousePt) >= 0) box.innerHTML += '\n\nYour track: Shift-click for a polygon';
     var host = $('maps').getBoundingClientRect(), mx = App.mousePx.x - host.left, my = App.mousePx.y - host.top;
     box.hidden = false;
     var bw = box.offsetWidth, bh = box.offsetHeight;
@@ -2956,6 +3010,7 @@ function onKey(e) {
   else if (k === ' ') toggleLoop();
   else if (k === '1' || k === '2' || k === '4') setLayout(+k);
   else if (k === 'Tab') setActive((App.active + (e.shiftKey ? App.layout - 1 : 1)) % App.layout);
+  else if (lk === 's' && e.shiftKey) SrvBox.toggle();
   else if (PRODUCT_KEYS[lk] && !e.shiftKey) setProduct(PRODUCT_KEYS[lk]);
   else if (lk === 't') Warn.start('cell');
   else if (lk === 'g') Warn.start(e.shiftKey ? 'line' : 'cell', true);
@@ -3009,6 +3064,7 @@ function init() {
   $('btn-warn').addEventListener('click', function () { Warn.openDialog(); });
   $('btn-trackonly').addEventListener('click', function (e) { Warn.start(e.shiftKey ? 'line' : 'cell', true); });
   $('btn-scit').addEventListener('click', function () { Scit.toggle(); });
+  SrvBox.init();
   $('btn-psev').addEventListener('click', function () { PSev.toggle(); });
   $('btn-cleartracks').addEventListener('click', function () { Warn.clearTracks(); });
   RadarMenu.init();
@@ -3019,6 +3075,45 @@ function init() {
   loadSite(App.site, null);
 }
 window.addEventListener('DOMContentLoaded', init);
+
+// SRV storm motion box: SCIT (default first guess), latest user track, or a typed motion.
+App.srvSource = 'scit'; App.srvManual = null;
+var SrvBox = (function () {
+  function fmt(m) { return m ? String(Math.round(m.from)).padStart(3, '0') + '/' + Math.round(m.kt) + ' kt' : null; }
+  function trackMo() { var W = Warn._W, t = W.motion || (W.tracks.length && W.tracks[W.tracks.length - 1].motion); return t || null; }
+  function fill() {
+    var sm = Scit.motion(), tm = trackMo();
+    $('srv-scit').textContent = sm ? fmt(sm) + (sm.src === 'SCIT avg' ? ' avg' : sm.src === 'SCIT default' ? ' default' : ' mean') : 'none loaded';
+    $('srv-track').textContent = fmt(tm) || 'no track yet';
+    document.querySelectorAll('#srvbox [name=srvsrc]').forEach(function (e) { e.checked = e.value === App.srvSource; });
+    if (App.srvSource !== 'manual') { var g = Vel.motion(); $('srv-dir').value = g ? Math.round(g.from) : ''; $('srv-kt').value = g ? Math.round(g.kt) : ''; }
+  }
+  function apply() {
+    var src = (document.querySelector('#srvbox [name=srvsrc]:checked') || {}).value || 'scit';
+    if (src === 'manual') {
+      var d = parseFloat($('srv-dir').value), k = parseFloat($('srv-kt').value);
+      if (!isFinite(d) || !isFinite(k) || k < 0) return;
+      App.srvManual = { from: ((d % 360) + 360) % 360, kt: k };
+    }
+    App.srvSource = src;
+    App.panels.forEach(function (p) { if (p.product === 'SRV') refreshPanel(p); });
+    fill();
+  }
+  function toggle(show) {
+    var box = $('srvbox'); box.hidden = show == null ? !box.hidden : !show;
+    if (!box.hidden) { Scit.sync(); fill(); }
+  }
+  function init() {
+    $('btn-srvmo').addEventListener('click', function () { toggle(); });
+    $('srv-close').addEventListener('click', function () { toggle(false); });
+    document.querySelectorAll('#srvbox [name=srvsrc]').forEach(function (e) { e.addEventListener('change', apply); });
+    ['srv-dir', 'srv-kt'].forEach(function (id) {
+      $(id).addEventListener('input', function () { document.querySelector('#srvbox [value=manual]').checked = true; apply(); });
+      $(id).addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Escape' || e.key === 'Enter') $(id).blur(); });
+    });
+  }
+  return { init: init, toggle: toggle, fill: fill };
+})();
 </script>
 
 </html>

@@ -86,13 +86,17 @@ var Vel = (function () {
     sw._deal = { src: m, m: res, wind: { u: ringU, v: ringV } };
     return res;
   }
-  // Storm motion used for SRV: active warning track, latest manual track, else SCIT mean motion.
-  function motion() {
+  // Storm motion used for SRV. SCIT motion is the first guess; the user can switch to their track or type a motion (SRV motion box).
+  function trackMotion() {
     var W = Warn._W;
     if (W.motion) return { from: W.motion.from, kt: W.motion.kt, src: 'track' };
     if (W.tracks.length) { var t = W.tracks[W.tracks.length - 1]; return { from: t.motion.from, kt: t.motion.kt, src: 'track' }; }
-    var sm = Scit.meanMotion(); if (sm) return { from: sm.from, kt: sm.kt, src: 'SCIT mean' };
     return null;
+  }
+  function motion() {
+    if (App.srvSource === 'manual' && App.srvManual) return { from: App.srvManual.from, kt: App.srvManual.kt, src: 'manual' };
+    if (App.srvSource === 'track') { var tm = trackMotion(); if (tm) return tm; }
+    return Scit.motion() || trackMotion();
   }
   function srv(sw) {
     var base = App.dealias ? dealias(sw) : sw.moments.VEL; if (!base) return null;

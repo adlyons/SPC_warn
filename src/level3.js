@@ -45,6 +45,12 @@ var Level3 = (function () {
       p = lend;
     }
     out.storms = out.storms.filter(function (s) { return s.pos; });
+    // tabular block: storm-average motion and the SCIT adaptation default motion (both "from" direction)
+    var txt = ''; for (var k = 0; k < bytes.length; k++) { var c = bytes[k]; txt += c >= 32 && c < 127 ? String.fromCharCode(c) : ' '; }
+    var m = /AVG SPEED\s+(\d+)\s+KTS\s+AVG DIRECTION\s+(\d+)\s+DEG/.exec(txt);
+    if (m) out.avg = { from: +m[2] % 360, kt: +m[1] };
+    var dd = /([\d.]+)\s+\(DEG\)\s+DEFAULT \(DIRECTION\)/.exec(txt), ds = /([\d.]+)\s+\(KTS\)\s+DEFAULT \(SPEED\)/.exec(txt);
+    if (dd && ds) out.dflt = { from: +dd[1] % 360, kt: +ds[1] };
     return out;
   }
   return { parseNST: parseNST };
